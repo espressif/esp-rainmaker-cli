@@ -1,44 +1,59 @@
-# Espressif Rainmaker CLI Tool
-A command line utility for the ESP-Rainmaker Project
+# Espressif RainMaker CLI
 
-### Prerequisites
+A command line utility for the ESP RainMaker
 
-**Package requirements and installation steps [MacOs]:**
-
-1. Download the Python Package from the URL : https://www.python.org/downloads/release/python-374/
-
-2. Select the Package : https://www.python.org/ftp/python/3.7.4/python-3.7.4-macosx10.9.pkg
-
-3. After the download is complete, run the installer and click through the setup steps leaving all the pre-selected installation defaults.
-
-4. Once complete, make sure that Python3 is installed correctly by running following command on Terminal.
-
-        python3 --version
-
-5. Install all python dependencies using
-
-        pip3 install -r requirements.txt
-
-6. Install get-pip using command
-
-        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-
-        python3 get-pip.py
+## Setup
 
 
-**Note: Using this utility requires ESP IDF to be set up on your host machine. If it is not already done, please refer the [Getting Started](getting-started.md) document first.**
+### Installing Python3
+
+If you have python3 already installed, just move on to the next section. Else, follow these steps:
+
+1. Download python 3 for your OS from the [python website](https://www.python.org/downloads/). Latest version should be fine, but the CLI is tested with python 3.7.4.
+2. Run the OS specific installer to install python3.
+3. Verify the installtion by running folling command on terminal.
+
+```
+$ python3 --version
+```
+
+### Installing dependencies
+
+We will have to first install pip, which is a package installer for python and then install the dependencies. Here are the steps:
+
+**Installing pip**
+
+```
+$ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+$ python3 get-pip.py
+```
+
+**Installing dependencies**
+
+```
+$ cd /path/to/esp-rainmaker-cli/
+$ pip3 install -r requirements.txt
+```
+
+> **Note: Using this utility requires ESP IDF to be set up on your host machine. If it is not already done, please refer the [ESP IDF Get Started guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) and ensure that the IDF\_PATH is set correctly**
 
 
-### Setup Path to rainmaker_cli_without_shell[MacOs]:
-1. Open the .bash_profile or .profile file in a editor.
+### Adding the CLI to your PATH (Optional)
 
-2. Add export PATH="your-dir:$PATH" to the last line of the file, where your-dir is the rainmaker_cli_without_shell.
+The RainMaker CLI can be used from the esp-rainmaker-cli folder directly as below:
 
+```
+$ ./rainmaker <cmd>
+```
+
+However, if you want to allow using it from any path, add it to your PATH variable. For MacOS, the steps are as below
+
+1. Open the ~/.bash_profile or ~/.profile file in an editor.
+2. Add `export PATH=$PATH:/path/to/esp-rainmaker-cli/` line at the end
 3. Save the .bash_profile or .profile file.
+4. Restart your terminal, or just execute `$ source ~/.bash_profile` or `$ source ~/.profile` as applicable.
 
-4. Restart your terminal.
-
-### Commands and Usage:
+## Commands and Usage:
 
 1. First User has to sign up using the following command : 
 
