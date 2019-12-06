@@ -24,6 +24,7 @@ import requests
 import json
 import argparse
 import collections
+
 if os.getenv('IDF_PATH'):
     sys.path.insert(0, os.path.join(os.getenv('IDF_PATH'), 'components', 'esptool_py', 'esptool'))
 else:
@@ -48,8 +49,6 @@ class cmd_interpreter:
         # Serial Port settings
         self.port = serial.Serial()
         self.port.baudrate = 115200
-        self.port.dtr = 0
-        self.port.rts = 0
         self.port.timeout = 2
         self.port.port = port
         self.port.open()
