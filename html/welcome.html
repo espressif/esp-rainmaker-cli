@@ -1,0 +1,143 @@
+<!-- Static welcome page -->
+<!doctype html>
+<html lang="en">
+
+    <head>
+        <!-- Required meta tags -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+        <!-- Bootstrap CSS -->
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+            integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+        <!-- Roboto Font from Google -->
+        <link href="https://fonts.googleapis.com/css?family=Roboto&display=swap" rel="stylesheet">
+
+        <title>Rainmaker Login</title>
+
+        <style>
+            body {
+                background-color: #f7f7f7;
+                font-family: 'Roboto', sans-serif;
+            }
+
+            .wrapper {
+                display: flex;
+                height: 100vh;
+            }
+
+            .container {
+                flex: 1;
+                align-self: center;
+                margin: 0 auto;
+                border-radius: 1px;
+                background-color: #fff;
+                box-shadow: 0 1px 25px 0 rgba(125, 125, 125, 0.6);
+            }
+
+            p {
+                margin-bottom: 0;
+            }
+
+            .login-wrapper {
+                color: #555;
+                padding: 5rem 4rem 7rem 4rem;
+                text-align: left;
+            }
+
+            .login-wrapper h1 {
+                font-size: 2rem;
+                text-align: center;
+                margin-top: 5rem;
+            }
+
+            .login-wrapper h4 {
+                font-size: 1.2rem;
+                text-align: center;
+                line-height: 2rem;
+            }
+
+            .login-wrapper img {
+                width: 15rem;
+                margin: 2rem auto;
+                display: block;
+            }
+
+            .nav-link {
+                padding: 0 1rem;
+            }
+
+            .login-wrapper .small-logo {
+                width: 7rem;
+                margin: 1rem auto;
+                display: block;
+            }
+
+            .nav {
+                justify-content: center;
+                margin-top: 3rem;
+            }
+
+            .nav .nav-item {
+                border-right: 1px solid #555;
+            }
+
+            .nav .nav-item:nth-last-child(1) {
+                border-right: none;
+            }
+
+
+            a {
+                /* color: #666464 !important; */
+                color: #880000 !important;
+                transition: all 0.3s ease;
+                text-decoration: underline;
+            }
+
+            a:hover {
+                color: #fe3035 !important;
+                text-decoration: underline !important;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class="container-fluid wrapper">
+            <div class="container">
+                <div class="row">
+
+                    <div class="col-lg-12">
+                        <div class="login-wrapper">
+                            <img src="https://rainmaker-login.s3.amazonaws.com/static/media/ESP-RainMaker-logo.svg"
+                                class="small-logo" alt="ESP Rainmaker">
+                            <img src="https://rainmaker-login.s3.amazonaws.com/static/media/esp-rainmaker.png"
+                                alt="Espressif Rainmaker">
+                            <h1>You have logged into ESP RainMaker.</h1>
+
+                            <h4>You can now close this window or check out the links
+                                below.</h4>
+
+                            <div>
+                                <ul class="nav">
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="#">Github Repository</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link"
+                                            href="https://d3n1cs1htsv13v.cloudfront.net/">Documentation</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="mailto: esp-rainmaker-admin@espressif.com">Contact
+                                            Us</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+
+</html>
