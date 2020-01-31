@@ -17,6 +17,7 @@ If you have python3 already installed, just move on to the next section. Else, f
 ```
 $ python3 --version
 ```
+> **Note: On Windows, use `python --version` to verify the installation.**
 
 ## Installing dependencies
 
@@ -28,6 +29,7 @@ We will have to first install pip, which is a package installer for python and t
 $ curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
 $ python3 get-pip.py
 ```
+> **Note: On Windows, use `python get-pip.py` for pip installation.**
 
 **Getting ESP RainMaker CLI**
 Download the ESP RainMaker CLI using the following
@@ -46,15 +48,15 @@ $ pip3 install -r requirements.txt
 > **Note: Using this utility requires ESP IDF to be set up on your host machine. If it is not already done, please refer the [ESP IDF Get Started guide](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) and ensure that the IDF\_PATH is set correctly**
 
 
-## Adding the CLI to your PATH (Optional)
+## Adding the CLI to your PATH (Optional) [For MacOS and Linux only]
 
 The RainMaker CLI can be used from the esp-rainmaker-cli folder directly as below:
 
 ```
-$ ./rainmaker <cmd>
+$ ./rainmaker.py <cmd>
 ```
 
-However, if you want to allow using it from any path, add it to your PATH variable. For MacOS, the steps are as below
+However, if you want to allow using it from any path, add it to your PATH variable. The steps are as below
 
 1. Open the ~/.bash_profile or ~/.profile file in an editor.
 2. Add `export PATH=$PATH:/path/to/esp-rainmaker-cli/` line at the end

@@ -1,7 +1,0 @@
-VERSION = 'v1'
-REGION = 'us-east-1'
-CLIENT_ID = '78suluee2rmlltshrt2v4lvuo0'
-AWS_IOT_ENDPOINT = 'agkpm791g3kzl-ats.iot.us-east-1.amazonaws.com'
-GITHUB_LOGIN_URL = 'https://rainmaker-staging.auth.us-east-1.amazoncognito.com/login?client_id={0}&response_type=token&scope=aws.cognito.signin.user.admin+email+openid+phone+profile&redirect_uri={1}'
-HOST = 'sxeznlpg30.execute-api.us-east-1.amazonaws.com'
-STAGE = 'testing'
