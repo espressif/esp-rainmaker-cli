@@ -142,7 +142,7 @@ def main():
                               nargs='?')
 
     claim_parser.add_argument("--platform",
-                              choices=['esp32', 'esp32s2'],
+                              choices=['esp32', 'esp32s2', 'esp32c3'],
                               type=str,
                               help='Node platform.')
 

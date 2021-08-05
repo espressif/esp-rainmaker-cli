@@ -302,8 +302,6 @@ def set_claim_initiate_data(mac_addr, node_platform):
 
 def claim_verify(claim_verify_data, header):
     claim_verify_url = CLAIM_VERIFY_URL
-    user_whitelist_err_msg = ('User is not allowed to claim esp32 device.'
-                              ' please contact administrator')
     claim_verify_enc_data = str(claim_verify_data).replace(
         "'", '"')
     log.debug("Claim Verify POST Request: url: " + claim_verify_url +
@@ -314,19 +312,8 @@ def claim_verify(claim_verify_data, header):
                                             headers=header,
                                             verify=CERT_FILE)
     if claim_verify_response.status_code != 200:
-        claim_verify_response_json = json.loads(
-            claim_verify_response.text.lower())
-        if (claim_verify_response_json["description"] in
-                user_whitelist_err_msg):
-            log.error('Claim verification failed.\n' +
-                        claim_verify_response.text)
-            print('\nYour account isn\'t whitelisted for ESP32.'
-                    ' Please send your registered email address to'
-                    ' esp-rainmaker-admin@espressif.com for whitelisting'
-                    )
-        else:
-            log.error('Claim verification failed.\n' +
-                        claim_verify_response.text)
+        log.error('Claim verification failed.\n' +
+                    claim_verify_response.text)
         exit(0)
     print("Claim verify done")
     log.debug("Claim Verify POST Response: status code: " +
