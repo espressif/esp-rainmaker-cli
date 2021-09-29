@@ -20,7 +20,7 @@ import datetime
 from rmaker_lib import serverconfig, configmanager, node
 from requests.exceptions import Timeout, ConnectionError,\
                                 RequestException
-from rmaker_lib.exceptions import NetworkError, SSLError,\
+from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, SSLError,\
                                   RequestTimeoutError
 from rmaker_lib.logger import log
 
@@ -252,6 +252,10 @@ class Service:
             log.debug("Uploading OTA Firmware Image Status Response : " +
                       str(response.text))
             response.raise_for_status()
+
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError as ssl_err:
             log.debug(ssl_err)
             raise SSLError

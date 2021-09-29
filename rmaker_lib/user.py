@@ -16,7 +16,7 @@ import json
 import requests
 import getpass
 from rmaker_lib import serverconfig, configmanager, session
-from rmaker_lib.exceptions import NetworkError, AuthenticationError, SSLError
+from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, AuthenticationError, SSLError
 from rmaker_lib.logger import log
 
 
@@ -67,6 +67,9 @@ class User:
                                      verify=configmanager.CERT_FILE)
             log.debug("Signup request response : " + response.text)
             response.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -106,6 +109,9 @@ class User:
                                      verify=configmanager.CERT_FILE)
             log.debug("Confirm user response : " + response.text)
             response.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -149,6 +155,9 @@ class User:
                                      verify=configmanager.CERT_FILE)
             log.debug("Login response : " + response.text)
             response.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -209,6 +218,9 @@ class User:
                                     verify=configmanager.CERT_FILE)
             log.debug("Forgot password response : " + response.text)
             response.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:

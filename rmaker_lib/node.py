@@ -18,7 +18,7 @@ import socket
 from rmaker_lib import serverconfig, configmanager
 from requests.exceptions import Timeout, ConnectionError,\
                                 RequestException, HTTPError
-from rmaker_lib.exceptions import NetworkError, InvalidClassInput, SSLError,\
+from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidClassInput, SSLError,\
                                   RequestTimeoutError
 from rmaker_lib.logger import log
 
@@ -81,6 +81,10 @@ class Node:
                                     verify=configmanager.CERT_FILE)
             log.debug("Get node status response : " + response.text)
             response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -117,6 +121,10 @@ class Node:
                                     timeout=(5.0, 5.0))
             log.debug("Get node config response : " + response.text)
             response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -158,6 +166,10 @@ class Node:
                                     timeout=(5.0, 5.0))
             log.debug("Get node params response : " + response.text)
             response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -207,6 +219,10 @@ class Node:
                                     timeout=(5.0, 5.0))
             log.debug("Set node params response : " + response.text)
             response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -263,6 +279,10 @@ class Node:
                                     timeout=(5.0, 5.0))
             log.debug("User node mapping response : " + response.text)
             response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError as ssl_err:
             log.debug(ssl_err)
             raise SSLError
@@ -356,6 +376,10 @@ class Node:
             log.debug("Check user node mapping status response : " +
                       response.text)
             response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError as ssl_err:
             log.debug(ssl_err)
             raise SSLError

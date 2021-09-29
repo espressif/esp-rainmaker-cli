@@ -17,7 +17,7 @@ import json
 import socket
 from rmaker_lib import serverconfig, configmanager
 from rmaker_lib import node
-from rmaker_lib.exceptions import NetworkError, InvalidConfigError, SSLError,\
+from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidConfigError, SSLError,\
     RequestTimeoutError
 from rmaker_lib.logger import log
 
@@ -60,6 +60,10 @@ class Session:
                                     verify=configmanager.CERT_FILE)
             log.debug("Get nodes request response : " + response.text)
             response.raise_for_status()
+
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -94,6 +98,10 @@ class Session:
                                     verify=configmanager.CERT_FILE)
             log.debug("Get MQTT Host response : " + response.text)
             response.raise_for_status()
+
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:
@@ -139,6 +147,7 @@ class Session:
                                     verify=configmanager.CERT_FILE,
                                     timeout=(5.0, 5.0))
             log.debug("Get user details request response : " + response.text)
+            response.raise_for_status()
 
         except requests.exceptions.HTTPError as http_err:
             log.debug(http_err)
@@ -193,10 +202,11 @@ class Session:
                                      verify=configmanager.CERT_FILE,
                                      timeout=(5.0, 5.0))
             log.debug("Logout request response : " + response.text)
+            response.raise_for_status()
 
         except requests.exceptions.HTTPError as http_err:
             log.debug(http_err)
-            return json.loads(http_err.response.text)
+            raise HttpErrorResponse(response.json())
         except requests.exceptions.SSLError:
             raise SSLError
         except requests.exceptions.ConnectionError:

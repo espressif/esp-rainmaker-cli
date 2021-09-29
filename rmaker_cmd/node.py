@@ -26,7 +26,7 @@ from pathlib import Path
 try:
     from rmaker_lib import session, node, device, service,\
         serverconfig, configmanager
-    from rmaker_lib.exceptions import NetworkError, InvalidJSONError, SSLError,\
+    from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidJSONError, SSLError,\
         RequestTimeoutError
     from rmaker_lib.logger import log
     from rmaker_tools.rmaker_claim.claim import claim
@@ -484,6 +484,7 @@ def get_node_config(vars=None):
     :rtype: None
     """
     try:
+        node_config = None
         n = node.Node(vars['nodeid'], session.Session())
         node_config = n.get_node_config()
     except Exception as get_nodes_err:
@@ -595,6 +596,7 @@ def get_params(vars=None):
     :rtype: None
     """
     try:
+        params = None
         n = node.Node(vars['nodeid'], session.Session())
         params = n.get_node_params()
     except SSLError:
@@ -664,6 +666,10 @@ def get_mqtt_host(vars=None):
                                 verify=configmanager.CERT_FILE)
         log.debug("Get MQTT Host response : " + response.text)
         response.raise_for_status()
+
+    except requests.exceptions.HTTPError as http_err:
+        log.debug(http_err)
+        raise HttpErrorResponse(response.json())
     except requests.exceptions.SSLError:
         raise SSLError
     except requests.ConnectionError:

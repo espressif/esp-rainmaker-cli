@@ -77,3 +77,21 @@ class SSLError(Exception):
     """ Raised when invalid SSL certificate is passed """
     def __str__(self):
         return 'Unable to verify SSL certificate.'
+
+class HttpErrorResponse(Exception):
+    """ Raise error when HTTP request fails"""
+    def __init__(self, err_resp):
+        self.err_resp = err_resp
+
+    def __str__(self):
+        try:
+            return '{:<7} ({}):  {}'.format(
+                self.err_resp['status'].capitalize(),
+                self.err_resp['error_code'],
+                self.err_resp['description']
+            )
+        except KeyError:
+            return '{:<7}: {}'.format(
+                self.err_resp['status'].capitalize(),
+                self.err_resp['description']
+            )
