@@ -142,7 +142,7 @@ def main():
                               nargs='?')
 
     claim_parser.add_argument("--platform",
-                              choices=['esp32', 'esp32s2', 'esp32c3'],
+                              choices=['esp32', 'esp32s2', 'esp32s3', 'esp32c3'],
                               type=str,
                               help='Node platform.')
 
@@ -177,7 +177,7 @@ def main():
     user_info_parser = subparsers.add_parser("getuserinfo",
                                          help="Get details of current (logged-in) user")
     user_info_parser.set_defaults(func=get_user_details)
-    
+
     # Node Sharing
     sharing_parser = subparsers.add_parser('sharing',
                                             help='Node Sharing Operations',
