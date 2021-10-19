@@ -22,7 +22,7 @@ import sys
 
 try:
     from rmaker_lib import serverconfig, configmanager
-    from rmaker_lib.exceptions import SSLError, NetworkError
+    from rmaker_lib.exceptions import HttpErrorResponse, SSLError, NetworkError
     from rmaker_lib.logger import log
 except ImportError as err:
     print("Failed to import ESP Rainmaker library. " + str(err))
@@ -193,6 +193,12 @@ def get_tokens(code):
                                  headers=request_header,
                                  verify=configmanager.CERT_FILE)
         response.raise_for_status()
+
+    except requests.exceptions.HTTPError as http_err:
+        log.debug(http_err)
+        for k,v in response.json().items():
+            print('{:<7}: {}'.format(k, v))
+        sys.exit(1)
     except requests.exceptions.SSLError:
         raise SSLError
     except requests.exceptions.ConnectionError:
