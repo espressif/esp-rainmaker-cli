@@ -17,11 +17,14 @@ import logging
 from logging import handlers
 from datetime import datetime
 
-if not os.path.exists('logs'):
-    os.makedirs('logs')
+log_base_path = os.path.dirname(os.path.dirname(__file__))
+log_dir_path = os.path.join(log_base_path, 'logs')
+
+if not os.path.exists(log_dir_path):
+    os.makedirs(log_dir_path)
 
 date_time_obj = datetime.now()
-log_filename = "logs/log_" + date_time_obj.strftime("%d-%m-%Y") + ".log"
+log_filename = os.path.join(log_dir_path, "rmaker_cli_" + date_time_obj.strftime("%Y-%m-%d") + ".log")
 
 log = logging.getLogger("CLI_LOGS")
 file_formatter = logging.Formatter('%(asctime)s:[%(funcName)s]:\
@@ -34,8 +37,8 @@ console_handler.setLevel(logging.ERROR)
 console_handler.setFormatter(console_formatter)
 
 file_handler = handlers.RotatingFileHandler(log_filename,
-                                            maxBytes=51200,
-                                            backupCount=16)
+                                            maxBytes=1024 * 1024,
+                                            backupCount=300)
 file_handler.setFormatter(file_formatter)
 file_handler.setLevel(logging.DEBUG)
 
