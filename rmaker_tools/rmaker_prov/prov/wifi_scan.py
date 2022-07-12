@@ -88,14 +88,17 @@ def scan_result_response(security_ctx, response_data):
     print_verbose(security_ctx, "ScanResult status " + str(resp.status))
     if resp.status != 0:
         raise RuntimeError
-    authmode_str = ["Open", "WEP", "WPA_PSK", "WPA2_PSK", "WPA_WPA2_PSK", "WPA2_ENTERPRISE"]
+    authmode_str = ["Open", "WEP", "WPA_PSK", "WPA2_PSK", "WPA_WPA2_PSK", "WPA2_ENTERPRISE", "WIFI_AUTH_WPA3_PSK", "WIFI_AUTH_WPA2_WPA3_PSK", "WIFI_AUTH_WAPI_PSK"]
     results = []
     for entry in resp.resp_scan_result.entries:
-        results += [{"ssid": entry.ssid.decode('latin-1').rstrip('\x00'),
-                     "bssid": utils.str_to_hexstr(entry.bssid.decode('latin-1')),
-                     "channel": entry.channel,
-                     "rssi": entry.rssi,
-                     "auth": authmode_str[entry.auth]}]
+        try:
+            results += [{"ssid": entry.ssid.decode('latin-1').rstrip('\x00'),
+                         "bssid": utils.str_to_hexstr(entry.bssid.decode('latin-1')),
+                         "channel": entry.channel,
+                         "rssi": entry.rssi,
+                         "auth": authmode_str[entry.auth]}]
+        except IndexError:
+            print_verbose("Could not get appropariate Auth mode {} for scanned SSID".format(entry.auth))
         print_verbose(security_ctx, "ScanResult SSID    : " + str(results[-1]["ssid"]))
         print_verbose(security_ctx, "ScanResult BSSID   : " + str(results[-1]["bssid"]))
         print_verbose(security_ctx, "ScanResult Channel : " + str(results[-1]["channel"]))
