@@ -235,6 +235,30 @@ class Config:
                      'Success')
         return access_token
 
+
+    def get_user_name(self):
+        """
+       Get User Name(email or phone number) for user
+
+       :raises InvalidConfigError: If there is an issue in getting config
+                                from file
+
+       :return: User name on Success
+       :rtype: str
+       """
+        try:
+            user_name = self.get_token_attribute('email')
+        except InvalidConfigError:
+            try:
+                user_name = self.get_token_attribute('phone_number')
+            except Exception as err:
+                log.warn("Error occurred while getting user name from token, " + str(err))
+                raise err
+        except Exception as err:
+            log.warn("Error occurred while getting user name from token, "+str(err))
+            raise err
+        return user_name
+
     def get_user_id(self):
         """
         Get User Id

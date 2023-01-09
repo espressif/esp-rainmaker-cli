@@ -31,19 +31,25 @@ def main():
 
     signup_parser = subparsers.add_parser("signup",
                                           help="Sign up for ESP Rainmaker")
-    signup_parser.add_argument('email',
+    signup_parser.add_argument('user_name',
                                type=str,
-                               metavar='<email>',
-                               help='Email address of the user')
+                               metavar='<user_name>',
+                               help='Email address or phone number of the user')
     signup_parser.set_defaults(func=signup)
 
     login_parser = subparsers.add_parser("login",
                                          help="Login to ESP Rainmaker")
-    login_parser.add_argument('--email',
+    login_parser_args = login_parser.add_mutually_exclusive_group()
+    login_parser_args.add_argument('--user_name',
+                              type=str,
+                              metavar='<user_name>',
+                              help='Email address/Phone number of the user')
+    login_parser_args.add_argument('--email',
                               type=str,
                               metavar='<email>',
                               help='Email address of the user')
-    login_parser.set_defaults(func=login)
+    login_parser_args.set_defaults(func=login)
+
 
     logout_parser = subparsers.add_parser("logout",
                                          help="Logout current (logged-in) user")
@@ -52,10 +58,10 @@ def main():
 
     forgot_password_parser = subparsers.add_parser("forgotpassword",
                                                    help="Reset the password")
-    forgot_password_parser.add_argument('email',
+    forgot_password_parser.add_argument('user_name',
                                         type=str,
-                                        metavar='<email>',
-                                        help='Email address of the user')
+                                        metavar='<user_name>',
+                                        help='Email address/Phone number of the user')
     forgot_password_parser.set_defaults(func=forgot_password)
 
     getnodes_parser = subparsers.add_parser('getnodes',

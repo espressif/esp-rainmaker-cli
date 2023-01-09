@@ -32,7 +32,7 @@ class Session:
         """
         config = configmanager.Config()
         log.info("Initialising session for user " +
-                 config.get_token_attribute('email'))
+                 config.get_user_name())
         self.id_token = config.get_access_token()
         if self.id_token is None:
             raise InvalidConfigError
@@ -190,7 +190,7 @@ class Session:
         socket.setdefaulttimeout(10)
         log.info('Logging out current logged-in user')
         version = serverconfig.VERSION
-        path = '/logout'
+        path = '/logout2'
         # Logout only from current session
         query_params = 'logout_all=false'
         logout_url = serverconfig.HOST.rstrip('/') + path + '?' + query_params
