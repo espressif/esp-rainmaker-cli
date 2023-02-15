@@ -35,17 +35,13 @@ from rmaker_tools.rmaker_claim.claim_config import \
 from rmaker_lib import session, configmanager
 from rmaker_lib.exceptions import SSLError
 from rmaker_cmd import node
+import esptool
 
 if os.getenv('IDF_PATH'):
     sys.path.insert(0, os.path.join(os.getenv('IDF_PATH'),
                                     'components',
-                                    'esptool_py',
-                                    'esptool'))
-    sys.path.insert(0, os.path.join(os.getenv('IDF_PATH'),
-                                    'components',
                                     'nvs_flash',
                                     'nvs_partition_generator'))
-    import esptool
     import nvs_partition_gen
 else:
     log.error("Please set the IDF_PATH environment variable.")
