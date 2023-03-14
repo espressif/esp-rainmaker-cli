@@ -24,12 +24,13 @@ import requests
 import json
 import binascii
 from types import SimpleNamespace
+from rmaker_lib.constants import DOT_CRT, DOT_CSV, DOT_INFO, DOT_KEY, ENDPOINT, NODE, NODE_INFO
 from rmaker_lib.logger import log
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from rmaker_tools.rmaker_claim.claim_config import \
     CLAIM_INITIATE_URL, CLAIM_VERIFY_URL
 from rmaker_lib import session, configmanager
@@ -85,6 +86,7 @@ def flash_nvs_partition_bin(port, bin_to_flash, address):
         log.error(err)
         sys.exit(1)
 
+
 def get_node_platform_and_mac(port):
     """
     Get Node Platform and Mac Addres from device
@@ -116,7 +118,7 @@ def get_node_platform_and_mac(port):
 
     # Finding chip type from output.
     node_platform_line = next(filter(lambda line: 'Chip is' in line,
-                                mystdout.getvalue().splitlines()))
+                                     mystdout.getvalue().splitlines()))
     for valid_platform in VALID_PLATFORMS:
         node_platform_list = node_platform_line.lower().split(valid_platform)
         if len(node_platform_list) != 1:
@@ -144,7 +146,8 @@ def get_node_platform_and_mac(port):
     log.debug("Node platform is: " + platform)
     return platform, mac_addr
 
-def gen_host_csr(private_key, common_name=None):
+
+def gen_host_csr(private_key, common_name, subjectPairs: dict = {}):
     """
     Generate Host CSR
 
@@ -155,14 +158,19 @@ def gen_host_csr(private_key, common_name=None):
                         defaults to None
     :type common_name: str|None
 
+    :param subjectPairs: Ordered Key-Value pairs that will go into CSR's subject
+    :type subjectPairs: dict[str, str]
+
     :return: CSR on Success, None on Failure
     :rtype: str|None
     """
     # Generate CSR on host
     builder = x509.CertificateSigningRequestBuilder()
-    builder = builder.subject_name(x509.Name([
-        x509.NameAttribute(NameOID.COMMON_NAME, common_name),
-    ]))
+    # Generate CSR subject
+    subjectNameAttributes = [x509.NameAttribute(NameOID.COMMON_NAME, common_name)]
+    for key, value in subjectPairs.items():
+        subjectNameAttributes.append(x509.NameAttribute(x509.ObjectIdentifier(key), value))
+    builder = builder.subject_name(x509.Name(subjectNameAttributes))
     builder = builder.add_extension(
         x509.BasicConstraints(ca=False, path_length=None), critical=True,
     )
@@ -175,6 +183,7 @@ def gen_host_csr(private_key, common_name=None):
 
     csr = request.public_bytes(serialization.Encoding.PEM).decode("utf-8")
     return csr
+
 
 def gen_hex_str(octets=64):
     """
@@ -189,6 +198,7 @@ def gen_hex_str(octets=64):
     """
     # Generate random hex string
     return binascii.b2a_hex(os.urandom(octets)).decode()
+
 
 def save_random_hex_str(dest_filedir, hex_str):
     """
@@ -218,31 +228,32 @@ def save_random_hex_str(dest_filedir, hex_str):
     except Exception as err:
         log.error(err)
 
+
 def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo, hex_str, node_info_csv):
     """
     Create files with claiming details
 
     :param dest_filedir: Destination File Directory
-    :type port: str
+    :type dest_filedir: str
 
     :param node_id: Node Id (data) to write to `node.info` file
-    :type port: str
+    :type node_id: str
 
-    :param private_key: Private Key (data) to write to `node.key` file
-    :type port: bytes
+    :param private_key: Private Key (object) to write to `node.key` file
+    :type private_key: bytes
 
     :param node_cert: Node Certificate (data) to write to `node.crt` file
-    :type port: str
+    :type node_cert: str
 
     :param endpointinfo: MQTT endpoint (data) to write to `endpoint.info` file
-    :type port: str
+    :type endpointinfo: str
 
     :param hex_str: random hex string
     :type hex_str: str
 
     :param node_info_csv: List of output csv file details (node information)
                           to write to `node_info.csv` file
-    :type port: list
+    :type node_info_csv: list
 
     :raises Exception: If there is any issue when writing to file
 
@@ -252,33 +263,33 @@ def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo,
     # Create files of each claim data info
     print("\nSaving claiming data info at location: ", dest_filedir)
     log.debug("Saving claiming data info at location: " +
-                dest_filedir)
+              dest_filedir)
     try:
-        log.debug("Writing node info at location: " + dest_filedir +
-                  'node.info')
+        log.debug("Writing node info at location: " +
+                  dest_filedir + NODE+DOT_INFO)
         # Create files for each claim data - node info, node key,
         # node cert, endpoint info
-        with open(dest_filedir+'node.info', 'w+') as info_file:
+        with open(dest_filedir+NODE+DOT_INFO, 'w+') as info_file:
             info_file.write(node_id)
 
         log.debug("Writing node info at location: " +
-                  dest_filedir + 'node.key')
-        with open(dest_filedir+'node.key', 'wb+') as info_file:
+                  dest_filedir + NODE + DOT_KEY)
+        with open(dest_filedir + NODE + DOT_KEY, 'wb+') as info_file:
             info_file.write(private_key)
 
         log.debug("Writing node info at location: " +
-                  dest_filedir + 'node.crt')
-        with open(dest_filedir+'node.crt', 'w+') as info_file:
+                  dest_filedir + NODE + DOT_CRT)
+        with open(dest_filedir + NODE + DOT_CRT, 'w+') as info_file:
             info_file.write(node_cert)
 
         log.debug("Writing node info at location: " +
-                  dest_filedir + 'endpoint.info')
-        with open(dest_filedir+'endpoint.info', 'w+') as info_file:
+                  dest_filedir + ENDPOINT + DOT_INFO)
+        with open(dest_filedir + ENDPOINT + DOT_INFO, 'w+') as info_file:
             info_file.write(endpointinfo)
 
         log.debug("Writing node info at location: " +
-                  dest_filedir + 'node_info.csv')
-        with open(dest_filedir+'node_info.csv', 'w+') as info_file:
+                  dest_filedir + NODE_INFO + DOT_CSV)
+        with open(dest_filedir + NODE_INFO + DOT_CSV, 'w+') as info_file:
             for input_line in node_info_csv:
                 info_file.write(input_line)
                 info_file.write("\n")
@@ -287,19 +298,21 @@ def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo,
     except Exception as file_error:
         raise file_error
 
+
 def gen_nvs_partition_bin(dest_filedir, output_bin_filename):
     # Generate nvs args to be sent to NVS Partition Utility
     nvs_args = SimpleNamespace(input=dest_filedir+'node_info.csv',
-                                output=output_bin_filename,
-                                size='0x6000',
-                                outdir=dest_filedir,
-                                version=2)
+                               output=output_bin_filename,
+                               size='0x6000',
+                               outdir=dest_filedir,
+                               version=2)
     # Run NVS Partition Utility to create binary of node info data
     print("\nGenerating NVS Partition Binary from claiming data: " +
-            dest_filedir + output_bin_filename)
+          dest_filedir + output_bin_filename)
     log.debug("Generating NVS Partition Binary from claiming data: " +
-                dest_filedir + output_bin_filename)
+              dest_filedir + output_bin_filename)
     nvs_partition_gen.generate(nvs_args)
+
 
 def set_claim_verify_data(claim_init_resp, private_key):
     # Generate CSR with common_name=node_id received in response
@@ -317,6 +330,7 @@ def set_claim_verify_data(claim_init_resp, private_key):
     node_info = node_id
     return claim_verify_data, node_info
 
+
 def set_claim_initiate_data(mac_addr, node_platform):
     # Set Claim initiate request data
     claim_initiate_data = {"mac_addr": mac_addr, "platform": node_platform}
@@ -324,51 +338,60 @@ def set_claim_initiate_data(mac_addr, node_platform):
         "'", '"')
     return claim_init_enc_data
 
-def claim_verify(claim_verify_data, header):
+
+def claim_verify(claim_verify_data, matter=False, header=None):
+    if header is None:
+        header = session.Session().request_header
     claim_verify_url = CLAIM_VERIFY_URL
     claim_verify_enc_data = str(claim_verify_data).replace(
         "'", '"')
+    # TODO: Remove the 'test' param after claiming API deprecates it
+    params = {"matter": matter, "test": True}
     log.debug("Claim Verify POST Request: url: " + claim_verify_url +
-                "data: " + str(claim_verify_enc_data) + "headers: " +
-                str(header) + "verify: " + CERT_FILE)
+              " data: " + str(claim_verify_enc_data) + " headers: " +
+              str(header) + " params: " + str(params) + " verify: " + CERT_FILE)
     claim_verify_response = requests.post(url=claim_verify_url,
-                                            data=claim_verify_enc_data,
-                                            headers=header,
-                                            verify=CERT_FILE)
+                                          data=claim_verify_enc_data,
+                                          params=params,
+                                          headers=header,
+                                          verify=CERT_FILE)
     if claim_verify_response.status_code != 200:
         log.error('Claim verification failed.\n' +
-                    claim_verify_response.text)
+                  claim_verify_response.text)
         exit(0)
     print("Claim verify done")
     log.debug("Claim Verify POST Response: status code: " +
-                str(claim_verify_response.status_code) +
-                " and response text: " + claim_verify_response.text)
+              str(claim_verify_response.status_code) +
+              " and response text: " + claim_verify_response.text)
     log.info("Claim verify done")
     return claim_verify_response
 
-def claim_initiate(claim_init_data, header):
+
+def claim_initiate(claim_init_data, header=None):
     print("Claim initiate started")
     claim_initiate_url = CLAIM_INITIATE_URL
+    if header is None:
+        header = session.Session().request_header
     try:
         # Claim Initiate Request
         log.info("Claim initiate started. Sending claim/initiate POST request")
         log.debug("Claim Initiate POST Request: url: " +
-                    claim_initiate_url + "data: " +
-                    str(claim_init_data) +
-                    "headers: " + str(header) +
-                    "verify: " + CERT_FILE)
+                  claim_initiate_url + " data: " +
+                  str(claim_init_data) +
+                  " headers: " + str(header) +
+                  " verify: " + CERT_FILE)
         claim_initiate_response = requests.post(url=claim_initiate_url,
                                                 data=claim_init_data,
                                                 headers=header,
                                                 verify=CERT_FILE)
         if claim_initiate_response.status_code != 200:
             log.error("Claim initiate failed.\n" +
-                        claim_initiate_response.text)
+                      claim_initiate_response.text)
             exit(0)
         print("Claim initiate done")
         log.debug("Claim Initiate POST Response: status code: " +
-                    str(claim_initiate_response.status_code) +
-                    " and response text: " + claim_initiate_response.text)
+                  str(claim_initiate_response.status_code) +
+                  " and response text: " + claim_initiate_response.text)
         log.info("Claim initiate done")
         return claim_initiate_response
     except requests.exceptions.SSLError:
@@ -377,22 +400,21 @@ def claim_initiate(claim_init_data, header):
         log.error("Please check the Internet connection.")
         exit(0)
 
+
 def start_claim_process(mac_addr, node_platform, private_key):
     log.info("Creating session")
-    curr_session = session.Session()
-    header = curr_session.request_header
     try:
         # Set claim initiate data
         claim_init_data = set_claim_initiate_data(mac_addr, node_platform)
 
         # Perform claim initiate request
-        claim_init_resp = claim_initiate(claim_init_data, header)
+        claim_init_resp = claim_initiate(claim_init_data)
 
         # Set claim verify data
         claim_verify_data, node_info = set_claim_verify_data(claim_init_resp, private_key)
 
         # Perform claim verify request
-        claim_verify_resp = claim_verify(claim_verify_data, header)
+        claim_verify_resp = claim_verify(claim_verify_data)
 
         # Get certificate from claim verify response
         node_cert = json.loads(claim_verify_resp.text)['certificate']
@@ -406,13 +428,14 @@ def start_claim_process(mac_addr, node_platform, private_key):
         log.error("Please check the Internet connection.")
         exit(0)
 
+
 def generate_private_key():
     # Generate Key
     log.info("Generate RSA key")
     private_key = rsa.generate_private_key(
-                    public_exponent=65537,
-                    key_size=2048,
-                    backend=default_backend()
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
     )
     log.info("RSA Private Key generated")
     # Extract private key in bytes from private key object generated
@@ -423,6 +446,21 @@ def generate_private_key():
         encryption_algorithm=serialization.NoEncryption())
     return private_key, private_key_bytes
 
+
+def generate_private_ecc_key():
+    # Generate Key
+    log.info("Generate EC key")
+    private_key = ec.generate_private_key(ec.SECP256R1(), default_backend())
+    log.info("EC Private Key generated")
+    # Extract private key in bytes from private key object generated
+    log.info("Extracting private key in bytes")
+    private_key_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption())
+    return private_key, private_key_bytes
+
+
 def verify_mac_dir_exists(creds_dir, mac_addr):
     mac_dir = Path(path.expanduser(str(creds_dir) + '/' + mac_addr))
     if mac_dir.exists():
@@ -430,6 +468,7 @@ def verify_mac_dir_exists(creds_dir, mac_addr):
         output_bin_filename = mac_addr + '.bin'
         return dest_filedir, output_bin_filename
     return False, False
+
 
 def create_mac_dir(creds_dir, mac_addr):
     # Create MAC directory
@@ -439,6 +478,7 @@ def create_mac_dir(creds_dir, mac_addr):
     output_bin_filename = mac_addr + '.bin'
     dest_filedir = str(mac_dir) + '/'
     return dest_filedir, output_bin_filename
+
 
 def create_config_dir():
     config = configmanager.Config()
@@ -451,11 +491,12 @@ def create_config_dir():
             configmanager.CONFIG_DIRECTORY))) +
         '/claim_data/' +
         userid
-        ))
+    ))
     if not creds_dir.exists():
         os.makedirs(path.expanduser(creds_dir))
         log.debug("Creating new directory " + str(creds_dir))
     return userid, creds_dir
+
 
 def get_mqtt_endpoint():
     # Set node claim data
@@ -465,6 +506,7 @@ def get_mqtt_endpoint():
     log.debug("Endpoint info received: " + endpointinfo)
     sys.stdout = sys.__stdout__
     return endpointinfo
+
 
 def verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_filename):
     # Set config mac addr path
@@ -476,17 +518,18 @@ def verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_f
         '/' + output_bin_filename
     # Check if claim data for node exists in CONFIG directory
     log.debug("Checking if claim data for node exists in directory: " +
-            configmanager.HOME_DIRECTORY +
-            configmanager.CONFIG_DIRECTORY)
+              configmanager.HOME_DIRECTORY +
+              configmanager.CONFIG_DIRECTORY)
     curr_claim_data = configmanager.Config().get_binary_config(
         config_file=mac_addr_config_path)
     if curr_claim_data:
         print("\nClaiming data already exists at location: " +
-            dest_filedir)
+              dest_filedir)
         log.debug("Claiming data already exists at location: " +
-                dest_filedir)
+                  dest_filedir)
         return True
     return False
+
 
 def verify_key_data_exists(key, file_name):
     """
@@ -517,6 +560,7 @@ def verify_key_data_exists(key, file_name):
     except Exception as file_error:
         raise file_error
 
+
 def flash_existing_data(port, bin_to_flash, address):
     # Flashing existing binary onto node
     if not port:
@@ -526,21 +570,23 @@ def flash_existing_data(port, bin_to_flash, address):
     flash_nvs_partition_bin(port, bin_to_flash, address)
     log.info("Binary flashed onto node")
 
+
 def set_csv_file_data(dest_filedir):
     # Set csv file data
     node_info_csv = [
-                        'key,type,encoding,value',
-                        'rmaker_creds,namespace,,',
-                        'node_id,file,binary,' +
-                        dest_filedir + 'node.info',
-                        'mqtt_host,file,binary,' +
-                        dest_filedir + 'endpoint.info',
-                        'client_cert,file,binary,' +
-                        dest_filedir + 'node.crt',
-                        'client_key,file,binary,' +
-                        dest_filedir + 'node.key'
-                    ]
+        'key,type,encoding,value',
+        'rmaker_creds,namespace,,',
+        'node_id,file,binary,' +
+        dest_filedir + 'node.info',
+        'mqtt_host,file,binary,' +
+        dest_filedir + 'endpoint.info',
+        'client_cert,file,binary,' +
+        dest_filedir + 'node.crt',
+        'client_key,file,binary,' +
+        dest_filedir + 'node.key'
+    ]
     return node_info_csv
+
 
 def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
     """
@@ -549,7 +595,7 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
 
     :param port: Serial Port
     :type port: str
-    
+
     :param mac_addr: MAC Addr
     :type mac_addr: str
 
@@ -582,7 +628,7 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
             node_platform, mac_addr = get_node_platform_and_mac(port)
 
         # Verify mac directory exists
-        dest_filedir, output_bin_filename  = verify_mac_dir_exists(creds_dir, mac_addr)
+        dest_filedir, output_bin_filename = verify_mac_dir_exists(creds_dir, mac_addr)
 
         # Create mac subdirectory in creds config directory created above
         if not dest_filedir and not output_bin_filename:
@@ -592,13 +638,13 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
         nvs_bin_filename = dest_filedir + output_bin_filename
 
         # Set csv file output data
-        node_info_csv=set_csv_file_data(dest_filedir)
+        node_info_csv = set_csv_file_data(dest_filedir)
 
         # Verify existing data exists
         claim_data_binary_exists = verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_filename)
         if claim_data_binary_exists:
             # Check if random key exist in csv
-            random_key_exist_in_csv = verify_key_data_exists('random', dest_filedir + 'node_info.csv')
+            random_key_exist_in_csv = verify_key_data_exists('random', dest_filedir + NODE_INFO + DOT_CSV)
             if not random_key_exist_in_csv:
                 # generate random key and add to csv
                 print('Random data does not exist, Creating new nvs binary. It will change your Wi-Fi Provisioning Pin')
