@@ -57,7 +57,7 @@ BLOCKS = [
     ("BLOCK_SYS_DATA", 2, 0x3f41a05c, None, 21)
 ]
 
-VALID_PLATFORMS = ['esp32-c3', 'esp32-s2', 'esp32-s3', 'esp32']
+VALID_PLATFORMS = ['esp32-c3', 'esp32-s2', 'esp32-s3', 'esp32', 'esp32c2', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c6', 'esp32-c6', 'esp32h2', 'esp32-h2', 'esp32-c2']
 
 
 def flash_nvs_partition_bin(port, bin_to_flash, address):
