@@ -52,7 +52,7 @@ class User:
         :rtype: bool
         """
         log.info("Creating new user with username : " + self.__username)
-        path = 'user'
+        path = 'user2'
         signup_info = {
             'user_name': self.__username,
             "password": password
@@ -94,7 +94,7 @@ class User:
         :rtype: bool
         """
         log.info("Confirming user with username : " + self.__username)
-        path = 'user'
+        path = 'user2'
         signup_info = {
             'user_name': self.__username,
             "verification_code": code
@@ -140,7 +140,7 @@ class User:
         log.info("User login with username : " + self.__username)
         if password is None:
             password = getpass.getpass()
-        path = 'login/'
+        path = 'login2/'
         login_info = {
             'user_name': self.__username,
             'password': password
@@ -170,20 +170,82 @@ class User:
         except Exception as json_decode_err:
             raise json_decode_err
 
-        if 'status' in result and result['status'] == 'success':
-            log.info("Login successful.")
-            config_data = {}
-            config_data['idtoken'] = result['idtoken']
-            config_data['refreshtoken'] = result['refreshtoken']
-            config_data['accesstoken'] = result['accesstoken']
-            configmanager.Config().set_config(config_data)
-            return session.Session()
+        try:
+            if 'status' in result and result['status'] == 'success':
+                if result.get('session'):
+                    otp_login_result = self.handle_otp_based_login(result['session'],)
+                    if otp_login_result.get('status') == 'success':
+                        result = otp_login_result
+                log.info("Login successful.")
+                config_data = {}
+                config_data['idtoken'] = result['idtoken']
+                config_data['refreshtoken'] = result['refreshtoken']
+                config_data['accesstoken'] = result['accesstoken']
+                configmanager.Config().set_config(config_data)
+                return session.Session()
+        except Exception as err:
+            log.error(err)
+            raise err
+        raise AuthenticationError
+
+    def handle_otp_based_login(self, login_session=None):
+        """
+       OTP based login for ESP RainMaker.
+
+       :param login_session: Session param received in first login request
+       :type login_session: str
+
+       :raises NetworkError: If there is a network connection issue
+                             during login
+       :raises Exception: If there is an HTTP issue during login or
+                          JSON format issue in HTTP response
+       :raises AuthenticationError: If login failed with the given parameters
+
+       :return: :class:`rmaker_lib.session.Session` on Success
+       :rtype: Dict
+        """
+        # prompt for verification_code
+        print("Sent OTP to your registered phone number/email ID: "+self.__username)
+        verification_code = input("Enter verification code: ")
+        path = 'login2/'
+        login_info = {
+            'user_name': self.__username,
+            'session': login_session,
+            'verification_code': verification_code
+        }
+        login_url = serverconfig.HOST + path
+
+        try:
+            log.debug("Login request url : " + login_url)
+            response = requests.post(url=login_url,
+                                     data=json.dumps(login_info),
+                                     headers=self.__request_header,
+                                     verify=configmanager.CERT_FILE)
+            log.debug(login_info)
+            log.debug("Login response : " + response.text)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(http_err)
+        except requests.exceptions.SSLError as err:
+            raise SSLError
+        except requests.exceptions.ConnectionError as err:
+            raise NetworkError
+        except Exception as err:
+            raise Exception(err)
+        try:
+            result = json.loads(response.text)
+            if 'status' in result and result['status'] == 'success':
+                return result
+        except Exception as json_decode_err:
+            raise json_decode_err
         raise AuthenticationError
 
     # User has to call forgot_password two times
     # First call without arguments to request forgot password
     # Second call to reset the password
     # with arguments password and verification_code
+
     def forgot_password(self, password=None, verification_code=None):
         """
         Forgot password request to reset the password.
@@ -203,7 +265,7 @@ class User:
         :rtype: bool
         """
         log.info("Forgot password request for user : " + self.__username)
-        path = 'forgotpassword'
+        path = 'forgotpassword2'
         forgot_password_info = {
             'user_name': self.__username,
             "password": password,

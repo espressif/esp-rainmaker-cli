@@ -122,7 +122,7 @@ def browser_login():
         return
 
     url = serverconfig.LOGIN_URL + str(port) +\
-        '&host_url=' + serverconfig.HOST + 'login' +\
+        '&host_url=' + serverconfig.HOST + 'login2' +\
         '&github_url=' + serverconfig.EXTERNAL_LOGIN_URL +\
         str(port)
 

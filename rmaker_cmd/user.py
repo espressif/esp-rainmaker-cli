@@ -15,7 +15,9 @@
 import sys
 import re
 import getpass
-import json
+
+from rmaker_cmd import validation
+
 try:
     from rmaker_lib import user, configmanager, session
     from rmaker_lib.logger import log
@@ -32,7 +34,7 @@ def signup(vars=None):
     """
     User signup to the ESP Rainmaker.
 
-    :param vars: `email` as key - Email address of the user, defaults to `None`
+    :param vars: `user_name` as key - Email address/Phone number of the user, defaults to `None`
     :type vars: dict
 
     :raises Exception: If there is any issue in signup for user
@@ -40,8 +42,8 @@ def signup(vars=None):
     :return: None on Success
     :rtype: None
     """
-    log.info('Signing up the user ' + vars['email'])
-    u = user.User(vars['email'])
+    log.info('Signing up the user ' + vars['user_name'])
+    u = user.User(vars['user_name'])
     password = get_password()
     try:
         status = u.signup_request(password)
@@ -50,7 +52,7 @@ def signup(vars=None):
     else:
         if status is True:
             verification_code = input('Enter verification code sent on your '
-                                      'Email.\n Verification Code : ')
+                                      'Email/Phone number.\n Verification Code : ')
             try:
                 status = u.signup(verification_code)
             except Exception as signup_err:
@@ -75,12 +77,20 @@ def login(vars=None):
     :return: None on Success and Failure
     :rtype: None
     """
-    log.info('Signing in the user. Username  ' + str(vars['email']))
+    log.info('Signing in the user. Username  ' + str(vars['user_name']))
     config = configmanager.Config()
     
     # Set email-id
-    email_id = vars['email']
-    log.info('Logging in user: {}'.format(email_id))
+    user_name = vars['user_name']
+    if not user_name:
+        user_name = vars['email']
+        # validate email
+        if user_name:
+            email_valid = validation.validate_email(user_name)
+            if not email_valid:
+                print("Invalid email address.")
+                return
+    log.info('Logging in user: {}'.format(user_name))
     
     # Check user current creds exist
     resp_filename = config.check_user_creds_exists()
@@ -89,11 +99,11 @@ def login(vars=None):
     if resp_filename:      
         
         # Get email-id of current logged-in user
-        curr_email_id = config.get_token_attribute('email')
-        log.info('Logging out user: {}'.format(curr_email_id))
+        curr_user_name = config.get_user_name()
+        log.info('Logging out user: {}'.format(curr_user_name))
         
         # Get user input
-        input_resp = config.get_input_to_end_session(curr_email_id)
+        input_resp = config.get_input_to_end_session(curr_user_name)
         if not input_resp:
             return
         
@@ -105,11 +115,11 @@ def login(vars=None):
     else:
         log.debug("Current login creds not found at path: {}".format(resp_filename))
 
-    if vars['email'] is None:
+    if user_name is None:
         browser_login()
         return
     try:
-        u = user.User(vars['email'])
+        u = user.User(user_name)
         u.login()
         print('Login Successful')
     except Exception as login_err:
@@ -131,13 +141,13 @@ def logout(vars=None):
     log.debug("Removing creds stored locally, invalidating token")
     config = configmanager.Config()
     
-    # Get email-id of current logged-in user
-    email_id = config.get_token_attribute('email')
-    log.info('Logging out user: {}'.format(email_id))
+    # Get email-id/phone no. of current logged-in user
+    user_name = config.get_user_name()
+    log.info('Logging out user: {}'.format(user_name))
 
     # Ask user for ending current session   
     # Get user input
-    input_resp = config.get_input_to_end_session(email_id)
+    input_resp = config.get_input_to_end_session(user_name)
     if not input_resp:
         return
     
@@ -174,7 +184,7 @@ def forgot_password(vars=None):
     """
     Forgot password request to reset the password.
 
-    :param vars: `email` as key - Email address of the user, defaults to `None`
+    :param vars: `user_name` as key - Email address/ phone number of the user, defaults to `None`
     :type vars: dict
 
     :raises Exception: If there is an HTTP issue while
@@ -183,22 +193,22 @@ def forgot_password(vars=None):
     :return: None on Success and Failure
     :rtype: None
     """
-    log.info('Changing user password. Username ' + vars['email'])
+    log.info('Changing user password. Username ' + vars['user_name'])
     config = configmanager.Config()
     
     # Get email-id if present
     try:
-        email_id = config.get_token_attribute('email')
+        user_name = config.get_user_name()
     except Exception:
-        email_id = None
+        user_name = None
     
     # If current logged-in user is same as
     # the email-id given as user input
     # end current session
     # (invalidate current logged-in user token)
-    log.debug("Current user email-id: {}, user input email-id: {}".format(email_id, vars['email']))
-    if email_id and email_id == vars['email']:
-        log.debug("Ending current session for user: {}".format(email_id))
+    log.debug("Current user email-id: {}, user input email-id: {}".format(user_name, vars['user_name']))
+    if user_name and user_name == vars['user_name']:
+        log.debug("Ending current session for user: {}".format(user_name))
         
         # Check user current creds exist
         resp_filename = config.check_user_creds_exists()
@@ -209,7 +219,7 @@ def forgot_password(vars=None):
 
         # If current creds exist, ask user for ending current session   
         # Get user input
-        input_resp = config.get_input_to_end_session(email_id)
+        input_resp = config.get_input_to_end_session(user_name)
         if not input_resp:
             return
         
@@ -219,7 +229,7 @@ def forgot_password(vars=None):
             print("Failed to end previous login session. Exiting.")
             return
     
-    u = user.User(vars['email'])
+    u = user.User(vars['user_name'])
     status = False
     
     try:
@@ -227,13 +237,13 @@ def forgot_password(vars=None):
     except Exception as forgot_pwd_err:
         log.error(forgot_pwd_err)
     else:
-        verification_code = input('Enter verification code sent on your Email.'
+        verification_code = input('Enter verification code sent on your Email/Phone number.'
                                   '\n Verification Code : ')
         password = get_password()
         if status is True:
             try:
-                log.debug('Received verification code on email ' +
-                          vars['email'])
+                log.debug('Received verification code on email/phone number ' +
+                          vars['user_name'])
                 status = u.forgot_password(password, verification_code)
             except Exception as forgot_pwd_err:
                 log.error(forgot_pwd_err)
