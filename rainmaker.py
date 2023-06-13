@@ -19,6 +19,7 @@ import argparse
 from rmaker_cmd.node import *
 from rmaker_cmd.user import signup, login, forgot_password,\
                             get_user_details, logout
+from rmaker_cmd.cmd_response import get_cmd_requests, create_cmd_request
 from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
@@ -325,6 +326,46 @@ def main():
                                        '\nDefault: List details of all request(s)')
 
     list_request_op_parser.set_defaults(func=node_sharing_ops, parser=list_request_op_parser)
+
+    # POST command response
+    create_cmd_resp_parser = subparsers.add_parser("create_cmd_request",
+                                                    help="Create a Command Response Request (Beta)",
+                                                    description='Create command response requests for the node(s) associated with the current (logged-in) user. The format of this command might change in future.')
+    create_cmd_resp_parser.usage = create_cmd_resp_parser.format_usage().strip() + ' (Beta)'
+    create_cmd_resp_parser.add_argument("nodes",
+                                       type=str,
+                                       help="Node Ids of the node(s)\n"
+                                       "format: <nodeid1>,<nodeid2>,...,<nodeid25>")
+    create_cmd_resp_parser.add_argument("cmd",
+                                        type=int,
+                                        help="ID of the command response request")
+    create_cmd_resp_parser.add_argument("data",
+                                        help="JSON data containing parameters to be sent to the node(s). Note: Enter JSON data in single quotes")
+    create_cmd_resp_parser.add_argument("--timeout",
+                                        type=int,
+                                        help="Time in seconds till which the command response request will be valid",
+                                        default=30)
+    create_cmd_resp_parser.set_defaults(func=create_cmd_request)
+
+
+    # GET command response
+    get_cmd_resp_parser = subparsers.add_parser("get_cmd_requests",
+                                                help="Get Command Response Requests (Beta)",
+                                                description='Get command response requests created by current (logged-in) user. The format of this command might change in future.')
+    get_cmd_resp_parser.usage = get_cmd_resp_parser.format_usage().strip() + ' (Beta)'
+    get_cmd_resp_parser.add_argument("request_id",
+                                    type=str,
+                                    help="ID of the command response request")
+    get_cmd_resp_parser.add_argument("--node_id",
+                                    type=str,
+                                    help="Node Id of the node")
+    get_cmd_resp_parser.add_argument("--start_id",
+                                    type=str,
+                                    help="Start Id used for pagination. This should be the Next Id received in the previous batch")
+    get_cmd_resp_parser.add_argument("--num_records",
+                                    type=int,
+                                    help="Number of requests to get")
+    get_cmd_resp_parser.set_defaults(func=get_cmd_requests)
 
     # Set parsers to print help for associated commands
     PARSER_HELP_PRINT = {
