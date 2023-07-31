@@ -11,3 +11,4 @@ cryptography==2.4.2
 pyparsing>=2.0.3,<2.4.0
 pyelftools>=0.22
 esptool==4.4
+esp-secure-cert-tool==1.0.1

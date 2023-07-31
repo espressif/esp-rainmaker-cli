@@ -30,6 +30,7 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from rmaker_tools.rmaker_claim.claim_config import \
     CLAIM_INITIATE_URL, CLAIM_VERIFY_URL
@@ -37,6 +38,7 @@ from rmaker_lib import session, configmanager
 from rmaker_lib.exceptions import SSLError
 from rmaker_cmd import node
 import esptool
+from esp_secure_cert.tlv_format import tlv_priv_key_t, tlv_priv_key_type_t, generate_partition_no_ds
 
 if os.getenv('IDF_PATH'):
     sys.path.insert(0, os.path.join(os.getenv('IDF_PATH'),
@@ -49,6 +51,11 @@ else:
     exit(0)
 
 CERT_FILE = './server_cert/server_cert.pem'
+
+CERT_VENDOR_ID = 0x131B
+CERT_PRODUCT_ID = 0x2
+
+secure_cert_partition_flash_address = '0xD000'
 
 # List of efuse blocks
 #
@@ -228,8 +235,22 @@ def save_random_hex_str(dest_filedir, hex_str):
     except Exception as err:
         log.error(err)
 
+def convert_private_key_from_pem_to_der(pem_file, out_der_file):
+    with open(pem_file, 'rb') as f:
+        pem_data = f.read()
 
-def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo, hex_str, node_info_csv):
+    pem_key = load_pem_private_key(pem_data, None, default_backend())
+
+    der_key = pem_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    with open(out_der_file, 'wb') as f:
+        f.write(der_key)
+
+def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo, node_info_csv):
     """
     Create files with claiming details
 
@@ -289,12 +310,11 @@ def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo,
 
         log.debug("Writing node info at location: " +
                   dest_filedir + NODE_INFO + DOT_CSV)
+
         with open(dest_filedir + NODE_INFO + DOT_CSV, 'w+') as info_file:
             for input_line in node_info_csv:
                 info_file.write(input_line)
                 info_file.write("\n")
-
-        save_random_hex_str(dest_filedir, hex_str)
     except Exception as file_error:
         raise file_error
 
@@ -314,13 +334,24 @@ def gen_nvs_partition_bin(dest_filedir, output_bin_filename):
     nvs_partition_gen.generate(nvs_args)
 
 
-def set_claim_verify_data(claim_init_resp, private_key):
+def set_claim_verify_data(claim_init_resp, private_key, matter):
     # Generate CSR with common_name=node_id received in response
     node_id = str(json.loads(
         claim_init_resp.text)['node_id'])
     print("Generating CSR")
     log.info("Generating CSR")
-    csr = gen_host_csr(private_key, common_name=node_id)
+    subjectPairs = {}
+    if matter:
+        # Generate CSR
+        # CHIP OID for vendor id
+        VENDOR_ID = '1.3.6.1.4.1.37244.2.1'
+        # CHIP OID for product id
+        PRODUCT_ID = '1.3.6.1.4.1.37244.2.2'
+        subjectPairs={
+            VENDOR_ID:hex(CERT_VENDOR_ID)[2:].upper().zfill(4),
+            PRODUCT_ID:hex(CERT_PRODUCT_ID)[2:].upper().zfill(4)
+        }
+    csr = gen_host_csr(private_key, common_name=node_id, subjectPairs=subjectPairs)
     if not csr:
         raise Exception("CSR Not Generated. Claiming Failed")
     log.info("CSR generated")
@@ -401,7 +432,7 @@ def claim_initiate(claim_init_data, header=None):
         exit(0)
 
 
-def start_claim_process(mac_addr, node_platform, private_key):
+def start_claim_process(mac_addr, node_platform, private_key, matter=False):
     log.info("Creating session")
     try:
         # Set claim initiate data
@@ -411,10 +442,10 @@ def start_claim_process(mac_addr, node_platform, private_key):
         claim_init_resp = claim_initiate(claim_init_data)
 
         # Set claim verify data
-        claim_verify_data, node_info = set_claim_verify_data(claim_init_resp, private_key)
+        claim_verify_data, node_info = set_claim_verify_data(claim_init_resp, private_key, matter)
 
         # Perform claim verify request
-        claim_verify_resp = claim_verify(claim_verify_data)
+        claim_verify_resp = claim_verify(claim_verify_data, matter)
 
         # Get certificate from claim verify response
         node_cert = json.loads(claim_verify_resp.text)['certificate']
@@ -459,7 +490,6 @@ def generate_private_ecc_key():
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption())
     return private_key, private_key_bytes
-
 
 def verify_mac_dir_exists(creds_dir, mac_addr):
     mac_dir = Path(path.expanduser(str(creds_dir) + '/' + mac_addr))
@@ -587,8 +617,107 @@ def set_csv_file_data(dest_filedir):
     ]
     return node_info_csv
 
+def split_device_cert(device_cert: str) -> tuple:
+    """
+    In case of matter claiming, claim_verify API returns device_cert and ca_cert in one string
+    This function splits them separate
 
-def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
+    :param device_cert: device_cert and ca_cert strings concatenated back-to-back
+    :type device_cert: str
+
+    :return: device_cert and ca_cert
+    :rtype: tuple[str, str]
+    """
+    indices = [index for index in range(len(device_cert)) if device_cert[index:].startswith("-----BEGIN CERTIFICATE-----")]
+    if len(indices) > 1:
+        split_device_cert = device_cert[:indices[1]]
+        split_ca_cert = device_cert[indices[1]:]
+    else:
+        split_device_cert = device_cert
+        split_ca_cert = ""
+    return split_device_cert, split_ca_cert
+
+def qr_code_generate_image(qr_code, path):
+    qr_code_payload = pyqrcode.create(qr_code)
+    qr_code_payload.png(os.path.join(path, 'qr_code.png'), scale=6)
+    qr_code_payload.show()
+
+def add_matter_data_to_files(path, vendor_id, product_id):
+    with open(OUT_FILE['mcsv'], 'r') as csv_file:
+        csv_dict = csv.DictReader(csv_file)
+        for row in csv_dict:
+            with open(os.path.join(path, 'discriminator.info'), 'w+') as info_file:
+                info_file.write(row['discriminator'])
+            with open(os.path.join(path, 'iteration_count.info'), 'w+') as info_file:
+                info_file.write(row['iteration-count'])
+            with open(os.path.join(path, 'salt.info'), 'w+') as info_file:
+                info_file.write(row['salt'])
+            with open(os.path.join(path, 'verifier.info'), 'w+') as info_file:
+                info_file.write(row['verifier'])
+            with open(os.path.join(path, 'serial_num.info'), 'w+') as info_file:
+                info_file.write(row['serial-num'])
+
+    with open(os.path.join(path, 'vendor_id.info'), 'w+') as info_file:
+        info_file.write(str(vendor_id))
+    with open(os.path.join(path, 'product_id.info'), 'w+') as info_file:
+        info_file.write(str(product_id))
+
+    qr_code = None
+    manual_code = None
+    passcode = None
+    with open(os.path.join(path, '-onb_codes.csv'), 'r') as info_file:
+        csv_data = csv.DictReader(info_file)
+        row = csv_data.__next__()
+        qr_code = row['qrcode']
+        manual_code = row['manualcode']
+        passcode = row['passcode']
+
+    with open(os.path.join(path, 'qr_code.info'), 'w+') as info_file:
+        info_file.write(qr_code)
+    with open(os.path.join(path, 'manual_code.info'), 'w+') as info_file:
+        info_file.write(manual_code)
+    with open(os.path.join(path, 'passcode.info'), 'w+') as info_file:
+        info_file.write(passcode)
+
+    print("QR code is: " + qr_code)
+    print("Manual code is: " + manual_code)
+    print("QR code URL: https://project-chip.github.io/connectedhomeip/qrcode.html?data=" + qr_code)
+
+    os.rename(os.path.join(path, '-qrcode.png'), os.path.join(path, 'qr_code.png'))
+
+    os.remove(os.path.join(path, '-onb_codes.csv'))
+    shutil.rmtree(os.path.join(path, 'internal'))
+    shutil.rmtree(os.path.join(path, 'staging'))
+    qr_code_generate_image(qr_code, path)
+
+def convert_x509_cert_from_pem_to_der(pem_file, out_der_file):
+    with open(pem_file, 'rb') as f:
+        pem_data = f.read()
+
+    pem_cert = x509.load_pem_x509_certificate(pem_data, default_backend())
+    der_cert = pem_cert.public_bytes(serialization.Encoding.DER)
+
+    with open(out_der_file, 'wb') as f:
+        f.write(der_cert)
+
+
+def add_rainmaker_claim_data_to_files(path, device_cert, device_key, ca_cert):
+    with open(os.path.join(path, 'device_cert.pem'), 'w+') as info_file:
+        info_file.write(device_cert)
+    with open(os.path.join(path, 'device_key.pem'), 'wb+') as info_file:
+        info_file.write(device_key)
+    with open(os.path.join(path, 'ca_cert.pem'), 'w+') as info_file:
+        info_file.write(ca_cert)
+
+    convert_x509_cert_from_pem_to_der(os.path.join(path, 'device_cert.pem'), os.path.join(path, 'device_cert.der'))
+    convert_private_key_from_pem_to_der(os.path.join(path, 'device_key.pem'), os.path.join(path, 'device_key.der'))
+    convert_x509_cert_from_pem_to_der(os.path.join(path, 'ca_cert.pem'), os.path.join(path, 'ca_cert.der'))
+
+def gen_esp_secure_cert_partition_bin(path, esp_secure_cert_file_name, node_platform):
+    tlv_priv_key = tlv_priv_key_t(tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, os.path.join(path, 'device_key.der'), None)
+    generate_partition_no_ds(tlv_priv_key, os.path.join(path, 'device_cert.der'), os.path.join(path, 'ca_cert.der'), node_platform, os.path.join(path, esp_secure_cert_file_name))
+
+def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False):
     """
     Claim the node connected to the given serial port
     (Get cloud credentials)
@@ -636,13 +765,14 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
         
         # Set NVS binary filename
         nvs_bin_filename = dest_filedir + output_bin_filename
+        esp_secure_cert_file_name = 'esp_secure_cert.bin'
 
         # Set csv file output data
         node_info_csv = set_csv_file_data(dest_filedir)
-
         # Verify existing data exists
         claim_data_binary_exists = verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_filename)
-        if claim_data_binary_exists:
+        # If the device was previously claimed without --matter, this check would reclaim the device using matter claiming.
+        if claim_data_binary_exists and not matter:
             # Check if random key exist in csv
             random_key_exist_in_csv = verify_key_data_exists('random', dest_filedir + NODE_INFO + DOT_CSV)
             if not random_key_exist_in_csv:
@@ -652,7 +782,6 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
                 hex_str = gen_hex_str()
                 save_random_hex_str(dest_filedir, hex_str)
                 gen_nvs_partition_bin(dest_filedir, output_bin_filename)
-
             # Flash NVS binary onto node
             flash_existing_data(port, nvs_bin_filename, flash_address)
             return
@@ -660,32 +789,44 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None):
         start = time.time()
 
         # Generate private key
-        private_key, private_key_bytes = generate_private_key()
+        if not matter:
+            private_key, private_key_bytes = generate_private_key()
+        else:
+            private_key, private_key_bytes = generate_private_ecc_key()
 
         print("\nClaiming process started. This may take time.")
         log.info("Claiming process started. This may take time.")
 
         # Start claim process
-        node_info, node_cert = start_claim_process(mac_addr, node_platform, private_key)
+        node_info, node_cert = start_claim_process(mac_addr, node_platform, private_key, matter)
 
         # Get MQTT endpoint
         endpointinfo = get_mqtt_endpoint()
 
-        # Generate random hex string
-        hex_str = gen_hex_str()
-
         # Create output claim files
-        save_claim_data(dest_filedir, node_info, private_key_bytes, node_cert, endpointinfo, hex_str, node_info_csv)
 
-        # Generate nvs partition binary
-        gen_nvs_partition_bin(dest_filedir, output_bin_filename)
-
-        # Flash generated NVS partition binary
-        flash_nvs_partition_bin(port, nvs_bin_filename, flash_address)
+        # TODO: Use node-id and node-cert
+        save_claim_data(dest_filedir, node_info, private_key_bytes, node_cert, endpointinfo, node_info_csv)
 
         print("Claiming done")
         log.info("Claiming done")
         print("Time(s):" + str(time.time() - start))
+        if not matter:
+            # Generate random hex string
+            hex_str = gen_hex_str()
+
+            save_random_hex_str(dest_filedir, hex_str)
+            # Generate nvs partition binary
+            gen_nvs_partition_bin(dest_filedir, output_bin_filename)
+
+            # Flash generated NVS partition binary
+            flash_nvs_partition_bin(port, nvs_bin_filename, flash_address)
+        else:
+            device_cert, ca_cert = split_device_cert(node_cert)
+            add_rainmaker_claim_data_to_files(dest_filedir, device_cert, private_key_bytes, ca_cert)
+            gen_esp_secure_cert_partition_bin(dest_filedir, esp_secure_cert_file_name, node_platform)
+            print("Generated esp_secure_cert partition: " + str(os.path.join(dest_filedir, esp_secure_cert_file_name)))
+            flash_nvs_partition_bin(port, os.path.join(dest_filedir, esp_secure_cert_file_name), secure_cert_partition_flash_address)
     except Exception as err:
         log.error(err)
         sys.exit(err)
