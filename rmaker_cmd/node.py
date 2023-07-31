@@ -710,7 +710,7 @@ def claim_node(vars=None):
             sys.exit('Invalid. <port> or --platform argument is needed.')
         if vars['port']:
             if not vars['mac'] and not vars['platform']:
-                claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'])
+                claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'])
                 return
         if (vars['mac'] and not vars['platform']):
             sys.exit("Invalid. --platform argument needed.")
@@ -719,7 +719,7 @@ def claim_node(vars=None):
         if vars['mac']:
             if not re.match(r'([0-9A-F]:?){12}', vars['mac']):
                 sys.exit('Invalid MAC address.')
-        claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'])
+        claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'])
     except Exception as claim_err:
         log.error(claim_err)
         return
