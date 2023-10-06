@@ -361,7 +361,7 @@ class Config:
         """
         socket.setdefaulttimeout(10)
         log.info("Extending user login session.")
-        path = 'login'
+        path = 'login2'
         request_payload = {
             'refreshtoken': refresh_token
             }
