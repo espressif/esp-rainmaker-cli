@@ -708,14 +708,6 @@ def claim_node(vars=None):
             sys.exit(vars['parser'].print_help())
         if vars['addr'] and not vars['port'] and not vars['platform']:
             sys.exit('Invalid. <port> or --platform argument is needed.')
-        if vars['port']:
-            if not vars['mac'] and not vars['platform']:
-                claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'])
-                return
-        if (vars['mac'] and not vars['platform']):
-            sys.exit("Invalid. --platform argument needed.")
-        if (not vars['mac'] and vars['platform']):
-            sys.exit("Invalid. --mac argument needed.")
         if vars['mac']:
             if not re.match(r'([0-9A-F]:?){12}', vars['mac']):
                 sys.exit('Invalid MAC address.')

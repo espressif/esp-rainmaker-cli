@@ -153,7 +153,6 @@ def main():
                               help='Use Matter Claiming')
 
     claim_parser.add_argument("--platform",
-                              choices=['esp32', 'esp32s2', 'esp32s3', 'esp32c3'],
                               type=str,
                               help='Node platform.')
 
