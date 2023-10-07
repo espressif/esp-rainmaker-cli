@@ -22,3 +22,5 @@ DOT_INFO = '.info'
 DOT_KEY = '.key'
 DOT_CRT = '.crt'
 DOT_CSV = '.csv'
+
+HOST = "host"

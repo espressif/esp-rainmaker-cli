@@ -24,7 +24,7 @@ import requests
 import json
 import binascii
 from types import SimpleNamespace
-from rmaker_lib.constants import DOT_CRT, DOT_CSV, DOT_INFO, DOT_KEY, ENDPOINT, NODE, NODE_INFO
+from rmaker_lib.constants import DOT_CRT, DOT_CSV, DOT_INFO, DOT_KEY, ENDPOINT, NODE, NODE_INFO, HOST
 from rmaker_lib.logger import log
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -50,7 +50,8 @@ else:
     log.error("Please set the IDF_PATH environment variable.")
     exit(0)
 
-CERT_FILE = './server_cert/server_cert.pem'
+CURR_DIR = os.path.dirname(__file__)
+CERT_FILE = os.path.abspath(os.path.join(CURR_DIR, os.pardir, os.pardir, 'server_cert/server_cert.pem'))
 
 CERT_VENDOR_ID = 0x131B
 CERT_PRODUCT_ID = 0x2
@@ -63,8 +64,6 @@ secure_cert_partition_flash_address = '0xD000'
 BLOCKS = [
     ("BLOCK_SYS_DATA", 2, 0x3f41a05c, None, 21)
 ]
-
-VALID_PLATFORMS = ['esp32-c3', 'esp32-s2', 'esp32-s3', 'esp32', 'esp32c2', 'esp32s2', 'esp32c3', 'esp32s3', 'esp32c6', 'esp32-c6', 'esp32h2', 'esp32-h2', 'esp32-c2']
 
 
 def flash_nvs_partition_bin(port, bin_to_flash, address):
@@ -94,21 +93,20 @@ def flash_nvs_partition_bin(port, bin_to_flash, address):
         sys.exit(1)
 
 
-def get_node_platform_and_mac(port):
+def get_node_mac(port):
     """
-    Get Node Platform and Mac Addres from device
+    Get MAC Address from device
 
     :param port: Serial Port
     :type port: str
 
-    :return: Node Platform and MAC Address on Success
+    :return: MAC Address on Success
     :rtype: str
     """
     if not port:
         sys.exit("<port> argument not provided. Cannot read MAC address from node.")
     command = ['--port', port, 'chip_id']
-    log.info("Running esptool command to get node\
-        platform and mac from device")
+    log.info("Running esptool command to get mac from device")
 
     try:
         sys.stdout = mystdout = StringIO()
@@ -118,41 +116,16 @@ def get_node_platform_and_mac(port):
     except esptool.FatalError:
         sys.stdout = sys.__stdout__
         log.debug(sys.stdout)
-        log.error('Platform and MAC could not be autodetected. Please provide by using --platform and --mac argument of claim command.')
+        log.error('MAC could not be autodetected. Please provide by using --mac argument of claim command.')
         sys.exit(0)
-
-    node_platform = None
-
-    # Finding chip type from output.
-    node_platform_line = next(filter(lambda line: 'Chip is' in line,
-                                     mystdout.getvalue().splitlines()))
-    for valid_platform in VALID_PLATFORMS:
-        node_platform_list = node_platform_line.lower().split(valid_platform)
-        if len(node_platform_list) != 1:
-            # platform name found
-            node_platform = valid_platform
-            break
 
     # Finds the first occurence of the line
     # with the MAC Address from the output.
     mac = next(filter(lambda line: 'MAC: ' in line,
                       mystdout.getvalue().splitlines()))
     mac_addr = mac.split('MAC: ')[1].replace(':', '').upper()
-    try:
-        platform = node_platform.split()[-1].lower().replace('-', '')
-    except AttributeError as err:
-        log.error('Platform autodetected is not valid. Valid platforms are {}'
-                  'Please provide by using --platform and --mac argument of '
-                  'claim command.'.format(VALID_PLATFORMS)
-                  )
-        sys.exit(1)
-
-    print("Node platform detected is: ", platform)
-    print("MAC address is: ", mac_addr)
     log.debug("MAC address received: " + mac_addr)
-    log.debug("Node platform is: " + platform)
-    return platform, mac_addr
-
+    return mac_addr
 
 def gen_host_csr(private_key, common_name, subjectPairs: dict = {}):
     """
@@ -752,9 +725,13 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
         # Create base config creds dir
         userid, creds_dir = create_config_dir()
 
-        # Get node platform and mac addr if not provided
-        if not node_platform and not mac_addr:
-            node_platform, mac_addr = get_node_platform_and_mac(port)
+        # Get mac addr if not provided
+        if not mac_addr:
+            mac_addr = get_node_mac(port)
+
+        # use default platform if not passed
+        if not node_platform:
+            node_platform = HOST
 
         # Verify mac directory exists
         dest_filedir, output_bin_filename = verify_mac_dir_exists(creds_dir, mac_addr)
