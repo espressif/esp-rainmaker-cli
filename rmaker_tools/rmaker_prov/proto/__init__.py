@@ -34,6 +34,7 @@ wifi_prov_path = os.path.dirname(__file__) + "/../wifi_provisioning/"
 constants_pb2 = _load_source("constants_pb2", protocomm_path + "python/constants_pb2.py")
 sec0_pb2      = _load_source("sec0_pb2",      protocomm_path + "python/sec0_pb2.py")
 sec1_pb2      = _load_source("sec1_pb2",      protocomm_path + "python/sec1_pb2.py")
+sec2_pb2      = _load_source("sec2_pb2",      protocomm_path + "python/sec2_pb2.py")
 session_pb2   = _load_source("session_pb2",   protocomm_path + "python/session_pb2.py")
 
 # wifi_provisioning component related python files generated from .proto files
