@@ -16,8 +16,6 @@ import sys
 import re
 import getpass
 
-from rmaker_cmd import validation
-
 try:
     from rmaker_lib import user, configmanager, session
     from rmaker_lib.logger import log
@@ -79,34 +77,28 @@ def login(vars=None):
     """
     log.info('Signing in the user. Username  ' + str(vars['user_name']))
     config = configmanager.Config()
-    
+
     # Set email-id
     user_name = vars['user_name']
     if not user_name:
         user_name = vars['email']
-        # validate email
-        if user_name:
-            email_valid = validation.validate_email(user_name)
-            if not email_valid:
-                print("Invalid email address.")
-                return
     log.info('Logging in user: {}'.format(user_name))
-    
+
     # Check user current creds exist
     resp_filename = config.check_user_creds_exists()
-    
+
     # If current creds exist, ask user for ending current session
-    if resp_filename:      
-        
+    if resp_filename:
+
         # Get email-id of current logged-in user
         curr_user_name = config.get_user_name()
         log.info('Logging out user: {}'.format(curr_user_name))
-        
+
         # Get user input
         input_resp = config.get_input_to_end_session(curr_user_name)
         if not input_resp:
             return
-        
+
         # Remove current login creds
         ret_val = config.remove_curr_login_creds(curr_creds_file=resp_filename)
         if ret_val is None:
@@ -140,17 +132,17 @@ def logout(vars=None):
     # Removing the creds stored locally
     log.debug("Removing creds stored locally, invalidating token")
     config = configmanager.Config()
-    
+
     # Get email-id/phone no. of current logged-in user
     user_name = config.get_user_name()
     log.info('Logging out user: {}'.format(user_name))
 
-    # Ask user for ending current session   
+    # Ask user for ending current session
     # Get user input
     input_resp = config.get_input_to_end_session(user_name)
     if not input_resp:
         return
-    
+
     # Call Logout API
     try:
         curr_session = session.Session()
@@ -164,19 +156,19 @@ def logout(vars=None):
     if 'status' in status_resp and status_resp['status'] == 'failure':
         print("Logout from ESP RainMaker Failed. Exiting.")
         print("[{}]:{}".format(status_resp['error_code'], status_resp['description']))
-        return   
-    
+        return
+
     # Remove current login creds
     ret_val = config.remove_curr_login_creds()
     if ret_val is None:
         print("Logout from ESP RainMaker Failed. Exiting.")
         return
-    
+
     # Logout is successful
     print("Logged out from ESP RainMaker")
     log.debug('Logout Successful')
     log.debug("Local creds removed successfully")
-    
+
     return
 
 
@@ -195,13 +187,13 @@ def forgot_password(vars=None):
     """
     log.info('Changing user password. Username ' + vars['user_name'])
     config = configmanager.Config()
-    
+
     # Get email-id if present
     try:
         user_name = config.get_user_name()
     except Exception:
         user_name = None
-    
+
     # If current logged-in user is same as
     # the email-id given as user input
     # end current session
@@ -209,7 +201,7 @@ def forgot_password(vars=None):
     log.debug("Current user email-id: {}, user input email-id: {}".format(user_name, vars['user_name']))
     if user_name and user_name == vars['user_name']:
         log.debug("Ending current session for user: {}".format(user_name))
-        
+
         # Check user current creds exist
         resp_filename = config.check_user_creds_exists()
         if not resp_filename:
@@ -217,21 +209,21 @@ def forgot_password(vars=None):
             log.error("User not logged in")
             return
 
-        # If current creds exist, ask user for ending current session   
+        # If current creds exist, ask user for ending current session
         # Get user input
         input_resp = config.get_input_to_end_session(user_name)
         if not input_resp:
             return
-        
+
         # Remove current login creds
         ret_val = config.remove_curr_login_creds(curr_creds_file=resp_filename)
         if ret_val is None:
             print("Failed to end previous login session. Exiting.")
             return
-    
+
     u = user.User(vars['user_name'])
     status = False
-    
+
     try:
         status = u.forgot_password()
     except Exception as forgot_pwd_err:
