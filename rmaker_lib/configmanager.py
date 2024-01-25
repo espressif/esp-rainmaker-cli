@@ -21,20 +21,23 @@ import requests
 import socket
 from pathlib import Path
 from os import path
-
-from rmaker_lib import serverconfig
-from rmaker_lib.exceptions import NetworkError,\
-                                  InvalidConfigError,\
-                                  InvalidUserError,\
-                                  InvalidApiVersionError,\
-                                  ExpiredSessionError,\
-                                  SSLError,\
-                                  RequestTimeoutError
 from rmaker_lib.logger import log
+from rmaker_lib import serverconfig
+from rmaker_lib.exceptions import NetworkError, \
+    InvalidConfigError, \
+    InvalidUserError, \
+    InvalidApiVersionError, \
+    ExpiredSessionError, \
+    SSLError, \
+    RequestTimeoutError
+from rmaker_lib.envval import get_rm_user_config_dir
+from rmaker_lib.constants import RM_CONFIG_FILE
 
-CONFIG_DIRECTORY = '.espressif/rainmaker'
-CONFIG_FILE = CONFIG_DIRECTORY + '/rainmaker_config.json'
-HOME_DIRECTORY = '~/'
+
+HOME_DIRECTORY = "~/"
+RM_USER_CONFIG_DIR = get_rm_user_config_dir()
+
+CONFIG_FILE = os.path.join(RM_USER_CONFIG_DIR, RM_CONFIG_FILE)
 CURR_DIR = os.path.dirname(__file__)
 CERT_FILE = CURR_DIR + '/../server_cert/server_cert.pem'
 
@@ -44,6 +47,7 @@ class Config:
     Config class used to instantiate instances of config to
     perform various get/set configuration operations
     """
+
     def set_config(self, data, config_file=CONFIG_FILE):
         """
         Set the configuration file.
@@ -63,22 +67,20 @@ class Config:
         :rtype: None
         """
         log.info("Configuring config file.")
-        file_dir = Path(path.expanduser(HOME_DIRECTORY + CONFIG_DIRECTORY))
-        file = Path(path.expanduser(HOME_DIRECTORY) + config_file)
+        file_dir = Path(RM_USER_CONFIG_DIR)
+        file = Path(config_file)
         if not file.exists():
             try:
                 if not file_dir.exists():
                     log.debug('Config directory does not exist,'
                               'creating new directory.')
-                    os.makedirs(path.expanduser(HOME_DIRECTORY) +
-                                CONFIG_DIRECTORY)
+                    os.makedirs(file_dir)
             except OSError as set_config_err:
                 log.error(set_config_err)
                 if set_config_err.errno != errno.EEXIST:
                     raise set_config_err
         try:
-            with open(path.join(path.expanduser(HOME_DIRECTORY),
-                      config_file), 'w') as config_file:
+            with open(config_file, 'w') as config_file:
                 json.dump(data, config_file)
         except Exception as set_config_err:
             raise set_config_err
@@ -100,12 +102,12 @@ class Config:
             accesstoken - Access Token from config saved\n
         :rtype: str
         """
-        file = Path(path.expanduser(HOME_DIRECTORY) + config_file)
+        file = Path(config_file)
+
         if not file.exists():
             raise InvalidUserError
         try:
-            with open(path.join(path.expanduser(HOME_DIRECTORY),
-                      config_file), 'r') as config_file:
+            with open(config_file, 'r') as config_file:
                 data = json.load(config_file)
                 idtoken = data['idtoken']
                 refresh_token = data['refreshtoken']
@@ -127,7 +129,7 @@ class Config:
         :return: Config data read from file on Success, None on Failure
         :rtype: str | None
         """
-        file = Path(path.expanduser(HOME_DIRECTORY) + config_file)
+        file = Path(config_file)
         if not file.exists():
             return None
         try:
@@ -156,21 +158,19 @@ class Config:
         :return: None on Success and Failure
         :rtype: None
         """
-        file = Path(path.expanduser(HOME_DIRECTORY) + CONFIG_FILE)
+        file = Path(CONFIG_FILE)
         if not file.exists():
             try:
-                os.makedirs(path.expanduser(HOME_DIRECTORY) + CONFIG_DIRECTORY)
+                os.makedirs(RM_USER_CONFIG_DIR)
             except OSError as set_config_err:
                 if set_config_err.errno != errno.EEXIST:
                     raise set_config_err
         try:
-            with open(path.join(path.expanduser(HOME_DIRECTORY),
-                      CONFIG_FILE), 'r') as config_file:
+            with open(CONFIG_FILE, 'r') as config_file:
                 config_data = json.load(config_file)
                 config_data['accesstoken'] = access_token
                 config_data['idtoken'] = id_token
-            with open(path.join(path.expanduser(HOME_DIRECTORY),
-                      CONFIG_FILE), 'w') as config_file:
+            with open(CONFIG_FILE, 'w') as config_file:
                 json.dump(config_data, config_file)
         except Exception as set_config_err:
             raise set_config_err
@@ -252,7 +252,8 @@ class Config:
             try:
                 user_name = self.get_token_attribute('phone_number')
             except Exception as err:
-                log.warn("Error occurred while getting user name from token, " + str(err))
+                log.warn(
+                    "Error occurred while getting user name from token, " + str(err))
                 raise err
         except Exception as err:
             log.warn("Error occurred while getting user name from token, "+str(err))
@@ -364,7 +365,7 @@ class Config:
         path = 'login2'
         request_payload = {
             'refreshtoken': refresh_token
-            }
+        }
 
         request_url = serverconfig.HOST + path
         try:
@@ -398,7 +399,7 @@ class Config:
         '''
         Check if user creds exist
         '''
-        curr_login_creds_file = os.path.expanduser(HOME_DIRECTORY + CONFIG_FILE)
+        curr_login_creds_file = CONFIG_FILE
         if os.path.exists(curr_login_creds_file):
             return curr_login_creds_file
         else:
@@ -409,7 +410,8 @@ class Config:
         Get input(y/n) from user to end current session
         '''
         while True:
-            user_input = input("This will end your current session for {}. Do you want to continue (Y/N)? :".format(email_id))
+            user_input = input(
+                "This will end your current session for {}. Do you want to continue (Y/N)? :".format(email_id))
             if user_input not in ["Y", "y", "N", "n"]:
                 print("Please provide Y/N only")
                 continue
@@ -425,11 +427,13 @@ class Config:
         '''
         log.info("Removing current login creds")
         if not curr_creds_file:
-            curr_creds_file = os.path.expanduser(HOME_DIRECTORY + CONFIG_FILE)
+            curr_creds_file = CONFIG_FILE
         try:
             os.remove(curr_creds_file)
-            log.info("Previous login session ended. Removing current login creds...Success...")
+            log.info(
+                "Previous login session ended. Removing current login creds...Success...")
             return True
         except Exception as e:
-            log.debug("Removing current login creds from path {}. Failed: {}".format(curr_creds_file, e))
+            log.debug("Removing current login creds from path {}. Failed: {}".format(
+                curr_creds_file, e))
         return None

@@ -491,7 +491,7 @@ def create_config_dir():
         str(Path(path.expanduser(configmanager.HOME_DIRECTORY))) +
         '/' +
         str(Path(path.expanduser(
-            configmanager.CONFIG_DIRECTORY))) +
+            configmanager.RM_USER_CONFIG_DIR))) +
         '/claim_data/' +
         userid
     ))
@@ -514,7 +514,7 @@ def get_mqtt_endpoint():
 def verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_filename):
     # Set config mac addr path
     mac_addr_config_path = str(Path(path.expanduser(
-        configmanager.CONFIG_DIRECTORY))) + '/claim_data/' +\
+        configmanager.RM_USER_CONFIG_DIR))) + '/claim_data/' +\
         userid +\
         '/' +\
         mac_addr +\
@@ -522,7 +522,7 @@ def verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_f
     # Check if claim data for node exists in CONFIG directory
     log.debug("Checking if claim data for node exists in directory: " +
               configmanager.HOME_DIRECTORY +
-              configmanager.CONFIG_DIRECTORY)
+              configmanager.RM_USER_CONFIG_DIR)
     curr_claim_data = configmanager.Config().get_binary_config(
         config_file=mac_addr_config_path)
     if curr_claim_data:
@@ -739,7 +739,7 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
         # Create mac subdirectory in creds config directory created above
         if not dest_filedir and not output_bin_filename:
             dest_filedir, output_bin_filename = create_mac_dir(creds_dir, mac_addr)
-        
+
         # Set NVS binary filename
         nvs_bin_filename = dest_filedir + output_bin_filename
         esp_secure_cert_file_name = 'esp_secure_cert.bin'
