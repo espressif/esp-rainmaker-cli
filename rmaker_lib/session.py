@@ -31,8 +31,7 @@ class Session:
         Instantiate session for logged in user.
         """
         config = configmanager.Config()
-        log.info("Initialising session for user " +
-                 config.get_user_name())
+        log.info("Initialising session for user")
         self.id_token = config.get_access_token()
         if self.id_token is None:
             raise InvalidConfigError
@@ -122,7 +121,7 @@ class Session:
     def get_user_details(self):
         """
         Get details of current logged-in user
-        
+
         :raises SSLError: If there is an SSL issue
         :raises HTTPError: If the HTTP response is an HTTPError
         :raises NetworkError: If there is a network connection issue
@@ -164,7 +163,7 @@ class Session:
             raise req_err
         except Exception:
             raise Exception(response.text)
-        
+
         log.info("Received user details successfully.")
         try:
             return json.loads(response.text)
@@ -174,7 +173,7 @@ class Session:
     def logout(self):
         """
         Logout current logged-in user
-        
+
         :raises SSLError: If there is an SSL issue
         :raises HTTPError: If the HTTP response is an HTTPError
         :raises NetworkError: If there is a network connection issue
