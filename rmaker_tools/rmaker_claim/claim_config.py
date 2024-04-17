@@ -12,6 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-CLAIM_BASE_URL = "https://esp-claiming.rainmaker.espressif.com/"
-CLAIM_INITIATE_URL = CLAIM_BASE_URL+"claim/initiate"
-CLAIM_VERIFY_URL = CLAIM_BASE_URL+"claim/verify"
+CLAIM_INITIATE_SUFFIX = "claim/initiate"
+CLAIM_VERIFY_SUFFIX = "claim/verify"
+
+claim_base_url = "https://esp-claiming.rainmaker.espressif.com/"
+claim_initiate_url = claim_base_url + CLAIM_INITIATE_SUFFIX
+claim_verify_url = claim_base_url + CLAIM_VERIFY_SUFFIX
+
+def claim_config_get_base_url():
+    return claim_base_url
+
+def claim_config_get_initiate_url():
+    return claim_initiate_url
+
+def claim_config_get_verify_url():
+    return claim_verify_url
+
+def claim_config_set_base_url(base_url):
+    global claim_base_url, claim_initiate_url, claim_verify_url
+    claim_base_url = base_url
+    claim_initiate_url = claim_base_url + CLAIM_INITIATE_SUFFIX
+    claim_verify_url = claim_base_url + CLAIM_VERIFY_SUFFIX
+    print('Setting claim base URL: ' + claim_base_url)

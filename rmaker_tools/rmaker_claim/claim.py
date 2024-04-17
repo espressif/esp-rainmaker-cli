@@ -32,8 +32,7 @@ from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from cryptography.hazmat.primitives.asymmetric import rsa, ec
-from rmaker_tools.rmaker_claim.claim_config import \
-    CLAIM_INITIATE_URL, CLAIM_VERIFY_URL
+from rmaker_tools.rmaker_claim.claim_config import claim_config_get_initiate_url, claim_config_get_verify_url
 from rmaker_lib import session, configmanager
 from rmaker_lib.exceptions import SSLError
 from rmaker_cmd import node
@@ -346,7 +345,7 @@ def set_claim_initiate_data(mac_addr, node_platform):
 def claim_verify(claim_verify_data, matter=False, header=None):
     if header is None:
         header = session.Session().request_header
-    claim_verify_url = CLAIM_VERIFY_URL
+    claim_verify_url = claim_config_get_verify_url()
     claim_verify_enc_data = str(claim_verify_data).replace(
         "'", '"')
     # TODO: Remove the 'test' param after claiming API deprecates it
@@ -373,7 +372,7 @@ def claim_verify(claim_verify_data, matter=False, header=None):
 
 def claim_initiate(claim_init_data, header=None):
     print("Claim initiate started")
-    claim_initiate_url = CLAIM_INITIATE_URL
+    claim_initiate_url = claim_config_get_initiate_url()
     if header is None:
         header = session.Session().request_header
     try:
