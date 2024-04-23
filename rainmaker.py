@@ -162,6 +162,11 @@ def main():
 
     claim_parser.add_argument("--addr", metavar='<flash-address>',
                               help='Address in the flash memory where the claim data will be written.\nDefault: 0x340000')
+
+    claim_parser.add_argument("--outdir", metavar='<outdir>',
+                              type=str,
+                              help='Directory to store the claim files.\nThe outdir can be specified using the environment variable RM_CLI_OUT_DIR as well.\nDefault: ~/.espressif/rainmaker/claim_data/')
+
     claim_parser.set_defaults(func=claim_node, parser=claim_parser)
 
     test_parser = subparsers.add_parser('test',
@@ -171,7 +176,7 @@ def main():
                              metavar='<nodeid>',
                              help='Add user node mapping')
     test_parser.set_defaults(func=test)
-    
+
     upload_ota_image_parser = subparsers.add_parser('otaupgrade',
                                                     help='Upload OTA Firmware image and start OTA Upgrade')
     upload_ota_image_parser.add_argument('nodeid',
@@ -211,14 +216,14 @@ def main():
                                metavar='<user_name>',
                                help='User Name (Email) of secondary user',
                                required=True)
-    
+
     add_op_parser.add_argument('--nodes',
                                type=str,
                                metavar='<node_ids>',
                                help="Node Id's of node(s)\n"
                                "format: <nodeid1>,<nodeid2>,...",
                                required=True)
-    
+
     add_op_parser.set_defaults(func=node_sharing_ops, parser=add_op_parser)
 
 
@@ -273,7 +278,7 @@ def main():
                                        required=True,
                                        help='Id of the sharing request'
                                        '\nYou can use {list_requests} command to list pending request(s)')
-    
+
     add_decline_op_parser.set_defaults(func=node_sharing_ops, parser=add_decline_op_parser)
 
     # Cancel pending requests

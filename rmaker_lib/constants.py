@@ -26,7 +26,7 @@ DOT_CSV = '.csv'
 HOST = "host"
 
 HOME_DIRECTORY = '~/'
-DEFAULT_RM_USER_CONFIG_DIR = HOME_DIRECTORY+'.espressif/rainmaker'
 
-RM_USER_CONFIG_DIR = "RM_USER_CONFIG_DIR"
 RM_CONFIG_FILE = 'rainmaker_config.json'
+
+

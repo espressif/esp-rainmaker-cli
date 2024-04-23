@@ -34,10 +34,9 @@ from rmaker_lib.envval import get_rm_user_config_dir
 from rmaker_lib.constants import RM_CONFIG_FILE
 
 
-HOME_DIRECTORY = "~/"
-RM_USER_CONFIG_DIR = get_rm_user_config_dir()
+RM_USER_CONFIG_DIR_VALUE = get_rm_user_config_dir()
 
-CONFIG_FILE = os.path.join(RM_USER_CONFIG_DIR, RM_CONFIG_FILE)
+CONFIG_FILE = os.path.join(RM_USER_CONFIG_DIR_VALUE, RM_CONFIG_FILE)
 CURR_DIR = os.path.dirname(__file__)
 CERT_FILE = CURR_DIR + '/../server_cert/server_cert.pem'
 
@@ -67,7 +66,7 @@ class Config:
         :rtype: None
         """
         log.info("Configuring config file.")
-        file_dir = Path(RM_USER_CONFIG_DIR)
+        file_dir = Path(RM_USER_CONFIG_DIR_VALUE)
         file = Path(config_file)
         if not file.exists():
             try:
@@ -161,7 +160,7 @@ class Config:
         file = Path(CONFIG_FILE)
         if not file.exists():
             try:
-                os.makedirs(RM_USER_CONFIG_DIR)
+                os.makedirs(RM_USER_CONFIG_DIR_VALUE)
             except OSError as set_config_err:
                 if set_config_err.errno != errno.EEXIST:
                     raise set_config_err

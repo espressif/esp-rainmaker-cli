@@ -37,6 +37,7 @@ from rmaker_tools.rmaker_claim.claim_config import \
 from rmaker_lib import session, configmanager
 from rmaker_lib.exceptions import SSLError
 from rmaker_cmd import node
+from rmaker_lib.envval import get_rm_cli_outdir
 import esptool
 from esp_secure_cert.tlv_format import tlv_priv_key_t, tlv_priv_key_type_t, generate_partition_no_ds
 
@@ -55,6 +56,8 @@ CERT_FILE = os.path.abspath(os.path.join(CURR_DIR, os.pardir, os.pardir, 'server
 
 CERT_VENDOR_ID = 0x131B
 CERT_PRODUCT_ID = 0x2
+
+RM_CLI_OUTPUT_DIR = get_rm_cli_outdir()
 
 secure_cert_partition_flash_address = '0xD000'
 
@@ -486,15 +489,8 @@ def create_mac_dir(creds_dir, mac_addr):
 def create_config_dir():
     config = configmanager.Config()
     userid = config.get_user_id()
+    creds_dir = Path(os.path.join(RM_CLI_OUTPUT_DIR, userid))
 
-    creds_dir = Path(path.expanduser(
-        str(Path(path.expanduser(configmanager.HOME_DIRECTORY))) +
-        '/' +
-        str(Path(path.expanduser(
-            configmanager.RM_USER_CONFIG_DIR))) +
-        '/claim_data/' +
-        userid
-    ))
     if not creds_dir.exists():
         os.makedirs(path.expanduser(creds_dir))
         log.debug("Creating new directory " + str(creds_dir))
@@ -513,16 +509,10 @@ def get_mqtt_endpoint():
 
 def verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_filename):
     # Set config mac addr path
-    mac_addr_config_path = str(Path(path.expanduser(
-        configmanager.RM_USER_CONFIG_DIR))) + '/claim_data/' +\
-        userid +\
-        '/' +\
-        mac_addr +\
-        '/' + output_bin_filename
+    mac_addr_config_path = os.path.join(RM_CLI_OUTPUT_DIR, userid, mac_addr, output_bin_filename)
     # Check if claim data for node exists in CONFIG directory
     log.debug("Checking if claim data for node exists in directory: " +
-              configmanager.HOME_DIRECTORY +
-              configmanager.RM_USER_CONFIG_DIR)
+              RM_CLI_OUTPUT_DIR)
     curr_claim_data = configmanager.Config().get_binary_config(
         config_file=mac_addr_config_path)
     if curr_claim_data:
@@ -690,7 +680,7 @@ def gen_esp_secure_cert_partition_bin(path, esp_secure_cert_file_name, node_plat
     tlv_priv_key = tlv_priv_key_t(tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, os.path.join(path, 'device_key.der'), None)
     generate_partition_no_ds(tlv_priv_key, os.path.join(path, 'device_cert.der'), os.path.join(path, 'ca_cert.der'), node_platform, os.path.join(path, esp_secure_cert_file_name))
 
-def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False):
+def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False, out_dir=None):
     """
     Claim the node connected to the given serial port
     (Get cloud credentials)
@@ -721,6 +711,10 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
 
         if not flash_address:
             flash_address = '0x340000'
+
+        if out_dir:
+            global RM_CLI_OUTPUT_DIR
+            RM_CLI_OUTPUT_DIR = out_dir
 
         # Create base config creds dir
         userid, creds_dir = create_config_dir()
