@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Filename 
+# Filename
 NODE = 'node'
 ENDPOINT = 'endpoint'
 NODE_INFO = 'node_info'
@@ -24,3 +24,9 @@ DOT_CRT = '.crt'
 DOT_CSV = '.csv'
 
 HOST = "host"
+
+HOME_DIRECTORY = '~/'
+
+RM_CONFIG_FILE = 'rainmaker_config.json'
+
+

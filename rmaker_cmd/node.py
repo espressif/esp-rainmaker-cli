@@ -69,7 +69,7 @@ def _check_user_input(node_ids_str):
     log.debug("User input result: {}".format(result))
     if result is None:
         sys.exit("Invalid format. Expected: <nodeid>,<nodeid>,... (no spaces)")
-    return True         
+    return True
 
 def _print_api_error(node_json_resp):
     print("{:<7} ({}):  {}".format(
@@ -88,7 +88,7 @@ def _set_node_ids_list(node_ids):
 def sharing_request_op(accept_request=False, request_id=None):
     """
     Accept or decline sharing request
-    
+
     :param vars: `accept_request` as key
                   If true, accept sharing request
                   If false, decline sharing request
@@ -119,7 +119,7 @@ def sharing_request_op(accept_request=False, request_id=None):
 
     node_obj = node.Node(None, session.Session())
     log.debug("API data set: {}".format(api_data))
-    
+
     # API to accept or decline node sharing request
     node_json_resp = node_obj.request_op(api_data)
     log.debug("Sharing request API response: {}".format(node_json_resp))
@@ -130,7 +130,7 @@ def list_sharing_details(node_id=None, primary_user=False, request_id=None, list
     """
     List sharing details of all nodes associated with user
     or List pending requests
-    
+
     :param vars: `node_id` as key - Node Id of the node(s)
                  (if not provided, is set to all nodes associated with user)
     :type vars: str
@@ -177,7 +177,7 @@ def list_sharing_details(node_id=None, primary_user=False, request_id=None, list
 def add_user_to_share_nodes(nodes=None, user=None):
     """
     Add user to share nodes
-    
+
     :param vars: `nodes` as key - Node Id of the node(s)
     :type vars: str
 
@@ -201,7 +201,7 @@ def add_user_to_share_nodes(nodes=None, user=None):
     log.debug("Node ids list: {}".format(node_id_list))
 
     log.debug("User name is set: {}".format(user))
-    
+
     # Create API input info
     api_input = {}
     api_input['nodes'] = node_id_list
@@ -249,17 +249,17 @@ def remove_sharing(nodes=None, user=None, request_id=None):
 
         # Check user input format
         ret_status = _check_user_input(node_ids)
-        
+
         # Create API query params dictionary
         api_params = {}
         api_params['nodes'] = node_ids
         api_params['user_name'] = user
         log.debug("API data set to: {}".format(api_params))
-        
+
         # API call to remove the shared nodes
         node_json_resp = node_obj.remove_user_from_shared_nodes(api_params)
         log.debug("Remove user from shared nodes response: {}".format(node_json_resp))
-    
+
     return node_json_resp
 
 def _get_status(resp):
@@ -371,7 +371,7 @@ def node_sharing_ops(vars=None):
         except AttributeError:
             print(vars['parser'].format_help())
             sys.exit(0)
-        
+
         # Set operation to base action
         op = action
 
@@ -379,7 +379,7 @@ def node_sharing_ops(vars=None):
             # Share nodes with user
             print("Adding user to share node(s)")
             node_json_resp = add_user_to_share_nodes(nodes=vars['nodes'], user=vars['user'])
-            
+
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
                 print("{:<11}: {}\n{:<11}: {}".format(
@@ -425,7 +425,7 @@ def node_sharing_ops(vars=None):
             # Remove nodes shared with user
             print("Removing user from shared nodes")
             node_json_resp = remove_sharing(nodes=vars['nodes'], user=vars['user'])
-            
+
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
                 print("{}: {}".format(
@@ -704,14 +704,14 @@ def claim_node(vars=None):
     :rtype: None
     """
     try:
-        if not vars['port'] and not vars['mac'] and not vars['addr'] and not vars['platform']:
+        if not vars['port'] and not vars['mac'] and not vars['addr'] and not vars['platform'] and not vars['outdir']:
             sys.exit(vars['parser'].print_help())
         if vars['addr'] and not vars['port'] and not vars['platform']:
             sys.exit('Invalid. <port> or --platform argument is needed.')
         if vars['mac']:
             if not re.match(r'([0-9A-F]:?){12}', vars['mac']):
                 sys.exit('Invalid MAC address.')
-        claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'])
+        claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'], out_dir=vars['outdir'])
     except Exception as claim_err:
         log.error(claim_err)
         return
