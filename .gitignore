@@ -6,3 +6,6 @@
 
 #Logs
 logs
+build/
+dist/
+esp_rainmaker_cli.egg-info
