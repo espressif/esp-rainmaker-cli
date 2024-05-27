@@ -40,15 +40,7 @@ from rmaker_lib.envval import get_rm_cli_outdir
 import esptool
 from esp_secure_cert.tlv_format import tlv_priv_key_t, tlv_priv_key_type_t, generate_partition_no_ds
 
-if os.getenv('IDF_PATH'):
-    sys.path.insert(0, os.path.join(os.getenv('IDF_PATH'),
-                                    'components',
-                                    'nvs_flash',
-                                    'nvs_partition_generator'))
-    import nvs_partition_gen
-else:
-    log.error("Please set the IDF_PATH environment variable.")
-    exit(0)
+from deps import nvs_partition_gen
 
 CURR_DIR = os.path.dirname(__file__)
 CERT_FILE = os.path.abspath(os.path.join(CURR_DIR, os.pardir, os.pardir, 'server_cert/server_cert.pem'))
