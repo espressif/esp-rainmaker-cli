@@ -17,7 +17,7 @@ import json
 import socket
 import time
 import datetime
-from rmaker_lib import serverconfig, configmanager, node
+from rmaker_lib import configmanager, node
 from requests.exceptions import Timeout, ConnectionError,\
                                 RequestException
 from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, SSLError,\
@@ -239,7 +239,8 @@ class Service:
             'base64_fwimage': fw_img
         }
 
-        request_url = serverconfig.HOST + path
+        config = configmanager.Config()
+        request_url = config.get_host() + path
         try:
             log.debug("Uploading OTA Firmware Image Request URL : " +
                       str(request_url)

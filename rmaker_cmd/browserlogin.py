@@ -21,7 +21,7 @@ import os
 import sys
 
 try:
-    from rmaker_lib import serverconfig, configmanager
+    from rmaker_lib import configmanager
     from rmaker_lib.exceptions import HttpErrorResponse, SSLError, NetworkError
     from rmaker_lib.logger import log
 except ImportError as err:
@@ -121,9 +121,10 @@ def browser_login():
                   'Use --email option instead.')
         return
 
-    url = serverconfig.LOGIN_URL + str(port) +\
-        '&host_url=' + serverconfig.HOST + 'login2' +\
-        '&github_url=' + serverconfig.EXTERNAL_LOGIN_URL +\
+    config = configmanager.Config()
+    url = config.get_login_url() + str(port) +\
+        '&host_url=' + config.get_host() + 'login2' +\
+        '&github_url=' + config.get_external_url() +\
         str(port)
 
     print('Opening browser window for login...')
@@ -181,14 +182,15 @@ def get_tokens(code):
     :rtype: None
     """
     log.info('Getting access tokens using authorization code.')
-    client_id = serverconfig.CLIENT_ID
+    config = configmanager.Config()
+    client_id = config.get_client()
     request_data = 'grant_type=authorization_code&client_id=' + client_id +\
                    '&code=' + code + '&redirect_uri=' +\
-                   serverconfig.REDIRECT_URL
+                   config.get_redirect_url()
 
     request_header = {'content-type': 'application/x-www-form-urlencoded'}
     try:
-        response = requests.post(url=serverconfig.TOKEN_URL,
+        response = requests.post(url=config.get_token_url(),
                                  data=request_data,
                                  headers=request_header,
                                  verify=configmanager.CERT_FILE)

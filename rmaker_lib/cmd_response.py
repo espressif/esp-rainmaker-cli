@@ -79,7 +79,8 @@ class CommandResponseRequest:
         if self.__num_records is not None:
             query_parameters += '&num_records=' + str(self.__num_records)
 
-        url = serverconfig.HOST + path + '?' + query_parameters
+        config = configmanager.Config()
+        url = config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Get command response request URL : " + url)
             response = requests.get(url=url,
@@ -147,7 +148,8 @@ class CommandResponseRequest:
         if self.__timeout is not None:
             request_payload['timeout'] = self.__timeout
 
-        request_url = serverconfig.HOST + path
+        config = configmanager.Config()
+        request_url = config.get_host() + path
         try:
             log.debug("Create command response request URL : " +
                       str(request_url)

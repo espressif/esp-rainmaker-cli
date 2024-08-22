@@ -18,7 +18,7 @@ import sys
 import argparse
 from rmaker_cmd.node import *
 from rmaker_cmd.user import signup, login, forgot_password,\
-                            get_user_details, logout
+                            get_user_details, logout, set_configuration
 from rmaker_cmd.cmd_response import get_cmd_requests, create_cmd_request
 from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
@@ -29,9 +29,18 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(func=None)
     subparsers = parser.add_subparsers(help='Functions')
+    
+    configure_parser = subparsers.add_parser("configure",
+                                             help="Configure ESP RainMaker")
+    
+    configure_parser.add_argument('--region',
+                                  type=str,
+                                  metavar='<region>',
+                                  help='Region for ESP RainMaker, Valid Values: china, global. Default: global')
+    configure_parser.set_defaults(func=set_configuration)
 
     signup_parser = subparsers.add_parser("signup",
-                                          help="Sign up for ESP Rainmaker")
+                                          help="Sign up for ESP RainMaker")
     signup_parser.add_argument('user_name',
                                type=str,
                                metavar='<user_name>',
@@ -39,7 +48,7 @@ def main():
     signup_parser.set_defaults(func=signup)
 
     login_parser = subparsers.add_parser("login",
-                                         help="Login to ESP Rainmaker")
+                                         help="Login to ESP RainMaker")
     login_parser_args = login_parser.add_mutually_exclusive_group()
     login_parser_args.add_argument('--user_name',
                               type=str,

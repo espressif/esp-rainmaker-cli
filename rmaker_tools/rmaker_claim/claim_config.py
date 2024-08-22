@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from rmaker_lib import configmanager
+
 CLAIM_INITIATE_SUFFIX = "claim/initiate"
 CLAIM_VERIFY_SUFFIX = "claim/verify"
 
@@ -20,12 +22,21 @@ claim_initiate_url = claim_base_url + CLAIM_INITIATE_SUFFIX
 claim_verify_url = claim_base_url + CLAIM_VERIFY_SUFFIX
 
 def claim_config_get_base_url():
+    config = configmanager.Config()
+    if config.get_claim_base_url() is not None:
+        return config.get_claim_base_url()
     return claim_base_url
 
 def claim_config_get_initiate_url():
+    config = configmanager.Config()
+    if config.get_claim_base_url() is not None:
+        return config.get_claim_base_url() + CLAIM_INITIATE_SUFFIX
     return claim_initiate_url
 
 def claim_config_get_verify_url():
+    config = configmanager.Config()
+    if config.get_claim_base_url() is not None:
+        return config.get_claim_base_url() + CLAIM_VERIFY_SUFFIX
     return claim_verify_url
 
 def claim_config_set_base_url(base_url):

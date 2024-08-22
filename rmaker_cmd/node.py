@@ -659,7 +659,8 @@ def get_mqtt_host(vars=None):
     """
     log.info("Getting MQTT Host endpoint.")
     path = 'mqtt_host'
-    request_url = serverconfig.HOST.split(serverconfig.VERSION)[0] + path
+    config = configmanager.Config()
+    request_url = config.get_host().split(serverconfig.VERSION)[0] + path
     try:
         log.debug("Get MQTT Host request url : " + request_url)
         response = requests.get(url=request_url,

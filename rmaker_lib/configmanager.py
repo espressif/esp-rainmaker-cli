@@ -47,7 +47,7 @@ class Config:
     perform various get/set configuration operations
     """
 
-    def set_config(self, data, config_file=CONFIG_FILE):
+    def set_config(self, data: dict, config_file=CONFIG_FILE):
         """
         Set the configuration file.
 
@@ -79,11 +79,50 @@ class Config:
                 if set_config_err.errno != errno.EEXIST:
                     raise set_config_err
         try:
+            json_data = {}
+            if file.exists():
+                with open(config_file, 'r') as pconfig_file:
+                    json_data = json.load(pconfig_file)
             with open(config_file, 'w') as config_file:
-                json.dump(data, config_file)
+                for key, value in data.items():
+                    json_data[key] = value
+                json.dump(json_data, config_file)
         except Exception as set_config_err:
             raise set_config_err
         log.info("Configured config file successfully.")
+
+    def unset_config(self, keys, curr_creds_file=CONFIG_FILE):
+        """
+        Unset the configuration file.
+
+        :params config_file: Config filename to delete config data from
+        :type data: str
+
+        :raises Exception: If there is a File Handling error while deleting
+                           config file
+
+        :return: None on Success and Failure
+        :rtype: None
+        """
+        if not curr_creds_file:
+            curr_creds_file = CONFIG_FILE
+        try:
+            # Read the JSON file
+            with open(curr_creds_file, 'r') as file:
+                data = json.load(file)
+            # Delete specified keys if they exist
+            for key in keys:
+                if key in data:
+                    del data[key]
+            with open(curr_creds_file, 'w') as file:
+                json.dump(data, file)
+            log.info(
+                "...Success...")
+            return True
+        except Exception as e:
+            log.debug("Removing keys from path {}. Failed: {}".format(
+                curr_creds_file, e))
+        return None
 
     def get_config(self, config_file=CONFIG_FILE):
         """
@@ -108,9 +147,9 @@ class Config:
         try:
             with open(config_file, 'r') as config_file:
                 data = json.load(config_file)
-                idtoken = data['idtoken']
-                refresh_token = data['refreshtoken']
-                access_token = data['accesstoken']
+                idtoken = data.get('idtoken')
+                refresh_token = data.get('refreshtoken')
+                access_token = data.get('accesstoken')
         except Exception as get_config_err:
             raise get_config_err
         return idtoken, refresh_token, access_token
@@ -312,7 +351,7 @@ class Config:
         socket.setdefaulttimeout(10)
         log.info("Checking for supported version.")
         path = 'apiversions'
-        request_url = serverconfig.HOST.split(serverconfig.VERSION)[0] + path
+        request_url = self.get_host().split(serverconfig.VERSION)[0] + path
         try:
             log.debug("Version check request url : " + request_url)
             response = requests.get(url=request_url, verify=CERT_FILE,
@@ -366,12 +405,13 @@ class Config:
             'refreshtoken': refresh_token
         }
 
-        request_url = serverconfig.HOST + path
+        request_url = self.get_host() + path
         try:
             log.debug("Extend session url : " + request_url)
             response = requests.post(url=request_url,
                                      data=json.dumps(request_payload),
                                      verify=CERT_FILE,
+                                     headers={'content-type': 'application/json'},
                                      timeout=(5.0, 5.0))
             response.raise_for_status()
             log.debug("Extend session response : " + response.text)
@@ -399,7 +439,11 @@ class Config:
         Check if user creds exist
         '''
         curr_login_creds_file = CONFIG_FILE
-        if os.path.exists(curr_login_creds_file):
+        file = Path(curr_login_creds_file)
+        if not file.exists():
+            return False
+        _,_,access_token = self.get_config()
+        if access_token is not None:
             return curr_login_creds_file
         else:
             return False
@@ -425,10 +469,8 @@ class Config:
         Remove current login creds
         '''
         log.info("Removing current login creds")
-        if not curr_creds_file:
-            curr_creds_file = CONFIG_FILE
         try:
-            os.remove(curr_creds_file)
+            self.unset_config({'accesstoken', 'idtoken', 'refreshtoken'}, curr_creds_file)
             log.info(
                 "Previous login session ended. Removing current login creds...Success...")
             return True
@@ -436,3 +478,141 @@ class Config:
             log.debug("Removing current login creds from path {}. Failed: {}".format(
                 curr_creds_file, e))
         return None
+
+    def get_environment_config(self):
+        """
+        Get the configuration details from config file.
+
+        :params config_file: Config filename to read config data from
+        :type data: str
+
+        :raises Exception: If there is a File Handling error while reading
+                           from config file
+
+        :return:
+            login_url - Login URL
+            host - Host URL
+            client - Client ID
+            token_url - Token URL
+            redirect_url - Redirect URL
+            external_url - External URL
+            claim_base_url - Claim Base URL
+        :rtype: str
+        """
+        config_file=CONFIG_FILE
+        file = Path(config_file)
+
+        if not file.exists():
+            return None, None, None, None, None, None, None
+        try:
+            with open(config_file, 'r') as config_file:
+                data = json.load(config_file)
+                login_url = data.get('login_url')
+                host = data.get('host')
+                client = data.get('client_id')
+                token_url = data.get('token_url')
+                redirect_url = data.get('redirect_url')
+                external_url = data.get('external_url')
+                claim_base_url = data.get('claim_base_url')
+        except Exception as get_config_err:
+            raise get_config_err
+        return login_url, host, client, token_url, redirect_url, external_url, claim_base_url
+    
+    def is_china_region(self):
+        """
+        Check if user is in china region
+        """
+        return self.get_host() == serverconfig.HOST_CN
+    
+    def get_region(self):
+        """
+        Get the region
+
+        :return: Region
+        :rtype: str
+        """
+        if self.is_china_region():
+            return 'china'
+        return 'global'
+
+    def get_login_url(self):
+        """
+        Get the login URL
+
+        :return: Login URL
+        :rtype: str
+        """
+        login_url, _, _, _, _, _, _ = self.get_environment_config()
+        if login_url is None:
+            return serverconfig.LOGIN_URL
+        return login_url
+    
+    def get_host(self):
+        """
+        Get the host URL
+
+        :return: Host URL
+        :rtype: str
+        """
+        _, host, _, _, _, _, _ = self.get_environment_config()
+        if host is None:
+            return serverconfig.HOST
+        return host
+
+    def get_client(self):
+        """
+        Get the client ID
+
+        :return: Client ID
+        :rtype: str
+        """
+        _, _, client, _, _, _, _ = self.get_environment_config()
+        if client is None:
+            return serverconfig.CLIENT_ID
+        return client
+
+    def get_token_url(self):
+        """
+        Get the token URL
+
+        :return: Token URL
+        :rtype: str
+        """
+        _, _, _, token_url, _, _, _ = self.get_environment_config()
+        if token_url is None:
+            return serverconfig.TOKEN_URL
+        return token_url
+    
+    def get_redirect_url(self):
+        """
+        Get the redirect URL
+
+        :return: Redirect URL
+        :rtype: str
+        """
+        _, _, _, _, redirect_url, _, _ = self.get_environment_config()
+        if redirect_url is None:
+            return serverconfig.REDIRECT_URL
+        return redirect_url
+    
+    def get_external_url(self):
+        """
+        Get the external URL
+
+        :return: External URL
+        :rtype: str
+        """
+        _, _, _, _, _, external_url, _ = self.get_environment_config()
+        if external_url is None:
+            return serverconfig.EXTERNAL_LOGIN_URL
+        return external_url
+    
+    def get_claim_base_url(self):
+        """
+        Get the claim base URL
+
+        :return: Claim base URL
+        :rtype: str
+        """
+        _, _, _, _, _, _, claim_base_url = self.get_environment_config()
+        return claim_base_url

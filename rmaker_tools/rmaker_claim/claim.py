@@ -386,7 +386,6 @@ def claim_initiate(claim_init_data, header=None):
             log.error("Claim initiate failed.\n" +
                       claim_initiate_response.text)
             exit(0)
-        print("Claim initiate done")
         log.debug("Claim Initiate POST Response: status code: " +
                   str(claim_initiate_response.status_code) +
                   " and response text: " + claim_initiate_response.text)

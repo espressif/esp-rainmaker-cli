@@ -15,7 +15,7 @@
 import json
 import requests
 import getpass
-from rmaker_lib import serverconfig, configmanager, session
+from rmaker_lib import configmanager, session
 from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, AuthenticationError, SSLError
 from rmaker_lib.logger import log
 
@@ -35,6 +35,7 @@ class User:
         log.info("Initialising user " + username)
         self.__username = username
         self.__passwd_change_token = ''
+        self.config = configmanager.Config()
         self.__request_header = {'content-type': 'application/json'}
 
     def signup_request(self, password):
@@ -57,7 +58,7 @@ class User:
             'user_name': self.__username,
             "password": password
             }
-        signup_url = serverconfig.HOST + path
+        signup_url = self.config.get_host() + path
 
         try:
             log.debug("Signup request url : " + signup_url)
@@ -99,7 +100,7 @@ class User:
             'user_name': self.__username,
             "verification_code": code
             }
-        signup_url = serverconfig.HOST + path
+        signup_url = self.config.get_host() + path
 
         try:
             log.debug("Confirm user request url : " + signup_url)
@@ -140,12 +141,12 @@ class User:
         log.info("User login with username : " + self.__username)
         if password is None:
             password = getpass.getpass()
-        path = 'login2/'
+        path = 'login2'
         login_info = {
             'user_name': self.__username,
             'password': password
             }
-        login_url = serverconfig.HOST + path
+        login_url = self.config.get_host() + path
 
         try:
             log.debug("Login request url : " + login_url)
@@ -207,13 +208,13 @@ class User:
         # prompt for verification_code
         print("Sent OTP to your registered phone number/email ID: "+self.__username)
         verification_code = input("Enter verification code: ")
-        path = 'login2/'
+        path = 'login2'
         login_info = {
             'user_name': self.__username,
             'session': login_session,
             'verification_code': verification_code
         }
-        login_url = serverconfig.HOST + path
+        login_url = self.config.get_host() + path
 
         try:
             log.debug("Login request url : " + login_url)
@@ -271,7 +272,7 @@ class User:
             "password": password,
             "verification_code": verification_code
             }
-        forgot_password_url = serverconfig.HOST + path
+        forgot_password_url = self.config.get_host() + path
         try:
             log.debug("Forgot password request url : " + forgot_password_url)
             response = requests.put(url=forgot_password_url,
