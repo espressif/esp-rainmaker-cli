@@ -20,7 +20,7 @@ except ImportError:
     )
     exit(1)
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 long_description = """
 =================
@@ -76,7 +76,9 @@ setup(
     install_requires = get_install_requires(),
     include_package_data = True,
     packages = find_packages(),
-
+    package_data = {
+        'server_cert':['server_cert.pem'],
+    },
     entry_points={
         'console_scripts': [
             'esp-rainmaker-cli = rainmaker.rainmaker:main',
