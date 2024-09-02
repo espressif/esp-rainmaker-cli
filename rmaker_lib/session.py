@@ -30,9 +30,9 @@ class Session:
         """
         Instantiate session for logged in user.
         """
-        config = configmanager.Config()
+        self.config = configmanager.Config()
         log.info("Initialising session for user")
-        self.id_token = config.get_access_token()
+        self.id_token = self.config.get_access_token()
         if self.id_token is None:
             raise InvalidConfigError
         self.request_header = {'Content-Type': 'application/json',
@@ -51,7 +51,7 @@ class Session:
         """
         log.info("Getting nodes associated with the user.")
         path = 'user/nodes'
-        getnodes_url = serverconfig.HOST + path
+        getnodes_url = self.config.get_host() + path
         try:
             log.debug("Get nodes request url : " + getnodes_url)
             response = requests.get(url=getnodes_url,
@@ -90,7 +90,7 @@ class Session:
         """
         log.info("Getting MQTT Host endpoint.")
         path = 'mqtt_host'
-        request_url = serverconfig.HOST.split(serverconfig.VERSION)[0] + path
+        request_url = self.config.get_host().split(serverconfig.VERSION)[0] + path
         try:
             log.debug("Get MQTT Host request url : " + request_url)
             response = requests.get(url=request_url,
@@ -138,7 +138,7 @@ class Session:
         log.info('Getting details of current logged-in user')
         version = serverconfig.VERSION
         path = '/user'
-        getdetails_url = serverconfig.HOST.rstrip('/') + path
+        getdetails_url = self.config.get_host().rstrip('/') + path
         try:
             log.debug("Get user details request url : " + getdetails_url)
             response = requests.get(url=getdetails_url,
@@ -192,7 +192,7 @@ class Session:
         path = '/logout2'
         # Logout only from current session
         query_params = 'logout_all=false'
-        logout_url = serverconfig.HOST.rstrip('/') + path + '?' + query_params
+        logout_url = self.config.get_host().rstrip('/') + path + '?' + query_params
         try:
             log.debug("Logout request url : " + logout_url)
             log.debug("Logout headers: {}".format(self.request_header))

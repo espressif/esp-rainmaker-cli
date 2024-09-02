@@ -15,7 +15,7 @@
 import requests
 import json
 import socket
-from rmaker_lib import serverconfig, configmanager
+from rmaker_lib import configmanager
 from requests.exceptions import Timeout, ConnectionError,\
                                 RequestException, HTTPError
 from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidClassInput, SSLError,\
@@ -44,6 +44,7 @@ class Node:
         try:
             self.request_header = {'content-type': 'application/json',
                                    'Authorization': session.id_token}
+            self.config = configmanager.Config()
         except AttributeError:
             raise InvalidClassInput(session, 'Invalid Session Input.\
                                               Expected: type <session object>.\
@@ -73,7 +74,7 @@ class Node:
                  self.__nodeid)
         path = 'user/nodes/status'
         query_parameters = 'nodeid=' + self.__nodeid
-        getnodestatus_url = serverconfig.HOST + path + '?' + query_parameters
+        getnodestatus_url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Get node status request url : " + getnodestatus_url)
             response = requests.get(url=getnodestatus_url,
@@ -112,7 +113,7 @@ class Node:
         log.info("Getting node config for node : " + self.__nodeid)
         path = 'user/nodes/config'
         query_parameters = 'nodeid=' + self.__nodeid
-        getnodeconfig_url = serverconfig.HOST + path + '?' + query_parameters
+        getnodeconfig_url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Get node config request url : " + getnodeconfig_url)
             response = requests.get(url=getnodeconfig_url,
@@ -157,7 +158,7 @@ class Node:
                  self.__nodeid)
         path = 'user/nodes/params'
         query_parameters = 'nodeid=' + self.__nodeid
-        getparams_url = serverconfig.HOST + path + '?' + query_parameters
+        getparams_url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Get node params request url : " + getparams_url)
             response = requests.get(url=getparams_url,
@@ -207,7 +208,7 @@ class Node:
                  self.__nodeid)
         path = 'user/nodes/params'
         query_parameters = 'nodeid=' + self.__nodeid
-        setparams_url = serverconfig.HOST + path + '?' + query_parameters
+        setparams_url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Set node params request url : " + setparams_url)
             log.debug("Set node params request payload : " + json.dumps(data))
@@ -267,7 +268,7 @@ class Node:
             'operation': operation
         }
 
-        request_url = serverconfig.HOST + path
+        request_url = self.config.get_host() + path
         try:
             log.debug("User node mapping request url : " + request_url)
             log.debug("User node mapping request payload : " +
@@ -365,7 +366,7 @@ class Node:
         path = 'user/nodes/mapping'
         query_parameters = "&request_id=" + request_id
 
-        request_url = serverconfig.HOST + path + '?' + query_parameters
+        request_url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Check user node mapping status request url : " +
                       request_url)
@@ -425,9 +426,9 @@ class Node:
         if self.__nodeid is not None:
             query_parameters = 'node_id=' + self.__nodeid
             log.debug("Get shared nodes query params : " + query_parameters)
-            url = serverconfig.HOST + path + '?' + query_parameters
+            url = self.config.get_host() + path + '?' + query_parameters
         else:
-            url = serverconfig.HOST + path
+            url = self.config.get_host() + path
         try:
             log.debug("Get shared nodes request url : " + url)
             log.debug("Request headers set: {}".format(self.request_header))
@@ -481,7 +482,7 @@ class Node:
         socket.setdefaulttimeout(10)
         log.debug("Setting shared nodes")
         path = 'user/nodes/sharing/requests'
-        url = serverconfig.HOST + path
+        url = self.config.get_host() + path
         try:
             log.debug("Request op - request url: {}".format(url))
             log.debug("Request op - headers set: {}".format(self.request_header))
@@ -537,7 +538,7 @@ class Node:
         socket.setdefaulttimeout(10)
         log.debug("Setting shared nodes")
         path = 'user/nodes/sharing'
-        url = serverconfig.HOST + path
+        url = self.config.get_host() + path
         try:
             log.debug("Add user to share nodes request url: {}".format(url))
             log.debug("Request headers set: {}".format(self.request_header))
@@ -593,7 +594,7 @@ class Node:
         path = 'user/nodes/sharing'
         query_parameters = 'nodes=' + data['nodes'] + '&' + 'user_name=' + data['user_name']
         log.debug("Remove shared nodes query params: {}".format(query_parameters))
-        url = serverconfig.HOST + path + '?' + query_parameters
+        url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Remove shared nodes request url: {}".format(url))
             log.debug("Request headers set: {}".format(self.request_header))
@@ -646,7 +647,7 @@ class Node:
         path = 'user/nodes/sharing/requests'
         query_parameters = 'request_id=' + req_id
         log.debug("Remove shared nodes request query params: {}".format(query_parameters))
-        url = serverconfig.HOST + path + '?' + query_parameters
+        url = self.config.get_host() + path + '?' + query_parameters
         try:
             log.debug("Remove shared nodes request url: {}".format(url))
             log.debug("Request headers set: {}".format(self.request_header))
@@ -704,9 +705,9 @@ class Node:
                 query_parameters = 'request_id=' + params['id'] + '&'
             query_parameters += 'primary_user=' + params['primary_user']
             log.debug("Get sharing request query params : " + query_parameters)
-            url = serverconfig.HOST + path + '?' + query_parameters
+            url = self.config.get_host() + path + '?' + query_parameters
         else:
-            url = serverconfig.HOST + path
+            url = self.config.get_host() + path
         try:
             log.debug("Get sharing request url : " + url)
             log.debug("Request headers set: {}".format(self.request_header))

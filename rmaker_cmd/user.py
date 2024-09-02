@@ -15,9 +15,10 @@
 import sys
 import re
 import getpass
+import time
 
 try:
-    from rmaker_lib import user, configmanager, session
+    from rmaker_lib import user, configmanager, session, serverconfig
     from rmaker_lib.logger import log
 except ImportError as err:
     print("Failed to import ESP Rainmaker library. " + str(err))
@@ -40,6 +41,10 @@ def signup(vars=None):
     :return: None on Success
     :rtype: None
     """
+    
+    config = configmanager.Config()
+    print('Current selected region is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `configure` command with region flag.'.format(config.get_region()))
+    time.sleep(3)
     log.info('Signing up the user ' + vars['user_name'])
     u = user.User(vars['user_name'])
     password = get_password()
@@ -77,6 +82,8 @@ def login(vars=None):
     """
     log.info('Signing in the user. Username  ' + str(vars['user_name']))
     config = configmanager.Config()
+    print('Current selected region is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `configure` command with region flag.'.format(config.get_region()))
+    time.sleep(3)
 
     # Set email-id
     user_name = vars['user_name']
@@ -287,6 +294,9 @@ def get_user_details(vars=None):
     """
     Get details of current logged-in user
     """
+    config = configmanager.Config()
+    print('Current selected region is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `configure` command with region flag.'.format(config.get_region()))
+    
     try:
         # Get user details
         log.debug('Getting details of current logged-in user')
@@ -302,4 +312,46 @@ def get_user_details(vars=None):
                 key = key + " (email)"
             title = key.replace("_", " ").title()
             print("{}: {}".format(title, val))
+    return
+
+def set_configuration(vars=None):
+    """
+    Set Configuration
+    
+    :param vars: `region` as key - Region of the user, defaults to `None`
+    :type vars: str | None
+    
+    :return: None on Success
+    """
+    if vars['region'] == 'china':
+        set_china_region(vars)
+    elif vars['region'] == 'global':
+        set_global_region(vars)
+    else:
+        log.error('Invalid Region. Valid regions: china, global. Exiting.')
+        sys.exit(1)
+    return
+
+def set_china_region(vars=None):
+    """
+    Set China Region
+    """
+    config = configmanager.Config()
+    config.set_config({
+        'login_url': serverconfig.LOGIN_URL_CN,
+        'host': serverconfig.HOST_CN,
+        'client_id': serverconfig.CLIENT_ID_CN,
+        'token_url': serverconfig.TOKEN_URL_CN,
+        'redirect_url': serverconfig.REDIRECT_URL_CN,
+        'external_url': serverconfig.EXTERNAL_LOGIN_URL_CN,
+        'claim_base_url': serverconfig.CLAIMING_BASE_URL_CN,
+    })
+    return
+
+def set_global_region(vars=None):
+    """
+    Set Global Region
+    """
+    config = configmanager.Config()
+    config.unset_config({'login_url', 'host', 'client_id', 'token_url', 'redirect_url', 'external_url', 'claim_base_url'})
     return
