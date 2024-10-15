@@ -701,6 +701,8 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
 
         if not flash_address:
             flash_address = '0x340000'
+            print('Using address \033[1m\033[32m{}\033[0m\033[0m. Check partition table for correct "fctry" partition address.'.format(flash_address))
+            print('Some examples may have it as \033[1m\033[32m0x3fa000\033[0m\033[0m.')
 
         if out_dir:
             global RM_CLI_OUTPUT_DIR
