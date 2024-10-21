@@ -29,7 +29,6 @@ try:
     from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidJSONError, SSLError,\
         RequestTimeoutError
     from rmaker_lib.logger import log
-    from rmaker_tools.rmaker_claim.claim import claim
 except ImportError as err:
     print("Failed to import ESP Rainmaker library. " + str(err))
     raise err
@@ -712,6 +711,8 @@ def claim_node(vars=None):
         if vars['mac']:
             if not re.match(r'([0-9A-F]:?){12}', vars['mac']):
                 sys.exit('Invalid MAC address.')
+
+        from rmaker_tools.rmaker_claim.claim import claim
         claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'], out_dir=vars['outdir'])
     except Exception as claim_err:
         log.error(claim_err)
