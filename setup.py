@@ -20,7 +20,7 @@ except ImportError:
     )
     exit(1)
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 
 long_description = """
 =================
@@ -78,6 +78,7 @@ setup(
     packages = find_packages(),
     package_data = {
         'server_cert':['server_cert.pem'],
+        'rmaker_cmd':['html/*.html'],
     },
     entry_points={
         'console_scripts': [
