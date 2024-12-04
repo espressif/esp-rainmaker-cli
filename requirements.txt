@@ -12,3 +12,4 @@ pyelftools>=0.22
 esptool>=4.4
 esp-secure-cert-tool==1.0.1
 setuptools
+esp_idf_nvs_partition_gen==0.1.6

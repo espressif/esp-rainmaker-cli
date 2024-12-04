@@ -39,8 +39,7 @@ from rmaker_cmd import node
 from rmaker_lib.envval import get_rm_cli_outdir
 import esptool
 from esp_secure_cert.tlv_format import tlv_priv_key_t, tlv_priv_key_type_t, generate_partition_no_ds
-
-from deps import nvs_partition_gen
+import esp_idf_nvs_partition_gen.nvs_partition_gen as nvs_partition_gen
 
 CURR_DIR = os.path.dirname(__file__)
 CERT_FILE = os.path.abspath(os.path.join(CURR_DIR, os.pardir, os.pardir, 'server_cert/server_cert.pem'))
