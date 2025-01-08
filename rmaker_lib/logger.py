@@ -21,7 +21,7 @@ log_base_path = os.path.dirname(os.path.dirname(__file__))
 log_dir_path = os.path.join(log_base_path, 'logs')
 
 if not os.path.exists(log_dir_path):
-    os.makedirs(log_dir_path)
+    os.makedirs(log_dir_path, exist_ok=True)
 
 date_time_obj = datetime.now()
 log_filename = os.path.join(log_dir_path, "rmaker_cli_" + date_time_obj.strftime("%Y-%m-%d") + ".log")
