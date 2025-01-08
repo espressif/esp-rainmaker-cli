@@ -19,6 +19,7 @@ from oauth2client import _helpers
 from six.moves import BaseHTTPServer, http_client, urllib
 import os
 import sys
+import pkg_resources
 
 try:
     from rmaker_lib import configmanager
@@ -63,7 +64,7 @@ class HttpdRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         parts = urllib.parse.urlparse(self.path)
         query = _helpers.parse_unique_urlencoded(parts.query)
         self.server.query_params = query
-        index_file = os.path.join(os.path.expanduser('.'), 'html/welcome.html')
+        index_file = pkg_resources.resource_filename('rmaker_cmd', 'html/welcome.html')
 
         try:
             with open(index_file, 'rb') as home_page:
