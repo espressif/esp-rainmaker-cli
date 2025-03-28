@@ -49,16 +49,19 @@ def main():
 
     login_parser = subparsers.add_parser("login",
                                          help="Login to ESP RainMaker")
-    login_parser_args = login_parser.add_mutually_exclusive_group()
-    login_parser_args.add_argument('--user_name',
+    login_parser.add_argument('--user_name',
                               type=str,
                               metavar='<user_name>',
                               help='Email address/Phone number of the user')
-    login_parser_args.add_argument('--email',
+    login_parser.add_argument('--email',
                               type=str,
                               metavar='<email>',
                               help='Email address of the user')
-    login_parser_args.set_defaults(func=login)
+    login_parser.add_argument('--password',
+                              type=str,
+                              metavar='<password>',
+                              help='Password of the user (for CI integration)')
+    login_parser.set_defaults(func=login)
 
 
     logout_parser = subparsers.add_parser("logout",

@@ -119,7 +119,7 @@ def login(vars=None):
         return
     try:
         u = user.User(user_name)
-        u.login()
+        u.login(password=vars.get('password'))
         print('Login Successful')
     except Exception as login_err:
         log.error(login_err)
