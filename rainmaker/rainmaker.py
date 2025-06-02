@@ -29,10 +29,10 @@ def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(func=None)
     subparsers = parser.add_subparsers(help='Functions')
-    
+
     configure_parser = subparsers.add_parser("configure",
                                              help="Configure ESP RainMaker")
-    
+
     configure_parser.add_argument('--region',
                                   type=str,
                                   metavar='<region>',
@@ -81,6 +81,19 @@ def main():
                                             help='List all nodes associated'
                                                   ' with the user')
     getnodes_parser.set_defaults(func=get_nodes)
+
+    getnodedetails_parser = subparsers.add_parser('getnodedetails',
+                                               help='Get detailed information for all nodes'
+                                                    ' including config, status, and params')
+    getnodedetails_parser.add_argument('nodeid',
+                                    type=str,
+                                    metavar='<nodeid>',
+                                    nargs='?',  # Make it optional
+                                    help='Node ID for the node (if not provided, details for all nodes will be fetched)')
+    getnodedetails_parser.add_argument('--raw',
+                                    action='store_true',
+                                    help='Print raw JSON output')
+    getnodedetails_parser.set_defaults(func=get_node_details)
 
     # Node Config
     getnodeconfig_parser = subparsers.add_parser('getnodeconfig',

@@ -35,6 +35,116 @@ except ImportError as err:
 
 MAX_HTTP_CONNECTION_RETRIES = 5
 
+def _format_schedule(schedule):
+    """
+    Helper function to format schedule information in a readable way
+
+    :param schedule: Schedule object from node params
+    :type schedule: dict
+
+    :return: Formatted schedule string
+    :rtype: str
+    """
+    schedule_str = []
+
+    # Add name and ID
+    name = schedule.get('name', 'Unnamed')
+    schedule_id = schedule.get('id', 'Unknown ID')
+    enabled = schedule.get('enabled', False)
+    status = "Enabled" if enabled else "Disabled"
+
+    schedule_str.append(f"Name: {name} (ID: {schedule_id}, {status})")
+
+    # Format triggers
+    if 'triggers' in schedule:
+        for trigger_idx, trigger in enumerate(schedule.get('triggers', [])):
+            trigger_str = []
+
+            # Handle minutes since midnight (convert to time)
+            if 'm' in trigger:
+                minutes = trigger.get('m', 0)
+                hours = minutes // 60
+                mins = minutes % 60
+                time_str = f"{hours:02d}:{mins:02d}"
+                trigger_str.append(f"Time: {time_str}")
+
+            # Handle day bitmap
+            if 'd' in trigger:
+                d_value = trigger.get('d', 0)
+
+                # Check if it's one-time schedule
+                if d_value == 0:
+                    trigger_str.append("Once only")
+                else:
+                    # Parse bitmap for days
+                    days = []
+                    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+                    for day_idx in range(7):
+                        if (d_value & (1 << day_idx)) != 0:
+                            days.append(day_names[day_idx])
+
+                    # Check if it's all weekdays
+                    if d_value == 31:  # 0b00011111
+                        trigger_str.append("All weekdays")
+                    # Check if it's weekends
+                    elif d_value == 96:  # 0b01100000
+                        trigger_str.append("Weekends")
+                    # Check if it's all days
+                    elif d_value == 127:  # 0b01111111
+                        trigger_str.append("Every day")
+                    else:
+                        trigger_str.append(f"On: {', '.join(days)}")
+
+            # Handle specific date
+            if 'dd' in trigger:
+                dd_value = trigger.get('dd', 1)
+                trigger_str.append(f"Date: {dd_value}")
+
+                # Handle month bitmap if present
+                if 'mm' in trigger:
+                    mm_value = trigger.get('mm', 0)
+                    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                    months = []
+
+                    for month_idx in range(12):
+                        if (mm_value & (1 << month_idx)) != 0:
+                            months.append(month_names[month_idx])
+
+                    trigger_str.append(f"Months: {', '.join(months)}")
+
+                # Handle year
+                if 'yy' in trigger:
+                    yy_value = trigger.get('yy', 0)
+                    trigger_str.append(f"Year: {yy_value}")
+
+                # Handle yearly repeat
+                if trigger.get('r', False):
+                    trigger_str.append("Repeats yearly")
+
+            # Handle relative seconds
+            if 'rsec' in trigger:
+                rsec_value = trigger.get('rsec', 0)
+                trigger_str.append(f"After {rsec_value} seconds")
+
+            schedule_str.append(f"  Trigger {trigger_idx+1}: {', '.join(trigger_str)}")
+
+    # Format actions
+    if 'action' in schedule:
+        actions = []
+        action_obj = schedule.get('action', {})
+
+        for device_name, device_action in action_obj.items():
+            action_details = []
+            for param, value in device_action.items():
+                action_details.append(f"{param}: {value}")
+
+            actions.append(f"{device_name}: {', '.join(action_details)}")
+
+        schedule_str.append(f"  Action: {'; '.join(actions)}")
+
+    return "\n".join(schedule_str)
+
 def get_nodes(vars=None):
     """
     List all nodes associated with the user.
@@ -56,8 +166,232 @@ def get_nodes(vars=None):
         if len(nodes.keys()) == 0:
             print('User is not associated with any nodes.')
             return
-        for key in nodes.keys():
-            print(nodes[key].get_nodeid())
+        for idx, key in enumerate(nodes.keys(), 1):
+            print(f"{idx}. {nodes[key].get_nodeid()}")
+    return
+
+def get_node_details(vars=None):
+    """
+    Get detailed information for all nodes including config, status, and params.
+
+    :param vars: Optional parameters:
+                 `raw` as key - If True, prints raw JSON output
+                 `nodeid` as key - Single node ID to get details for
+    :type vars: dict | None
+
+    :raises Exception: If there is an HTTP issue while getting node details
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        s = session.Session()
+        raw_output = vars.get('raw', False) if vars else False
+        node_id = vars.get('nodeid') if vars else None
+
+        # Get node details with filters if provided
+        if node_id:
+            # Make targeted API call for a single node
+            node_details = s.get_node_details_by_id(node_id)
+            
+            if not node_details or 'node_details' not in node_details or len(node_details['node_details']) == 0:
+                print(f'No details available for node {node_id}.')
+                return
+        else:
+            # Get all nodes
+            node_details = s.get_node_details()
+            
+            if not node_details or 'node_details' not in node_details or len(node_details['node_details']) == 0:
+                print('No node details available or user is not associated with any nodes.')
+                return
+
+        if raw_output:
+            # Print raw JSON if requested
+            print(json.dumps(node_details, indent=4))
+            return
+            
+        # Print formatted node details
+        for idx, node_info in enumerate(node_details['node_details'], 1):
+            node_id = node_info.get('id', 'Unknown')
+            _print_node_details(node_id, node_info, idx)
+            print()  # Add empty line between nodes
+    except Exception as e:
+        log.error(e)
+        print(f"Error retrieving node details: {str(e)}")
+
+def _print_node_details(node_id, node_info, index=None):
+    """
+    Helper function to print formatted node details
+
+    :param node_id: ID of the node
+    :type node_id: str
+    :param node_info: Node information dictionary
+    :type node_info: dict
+    :param index: Optional index number for the node
+    :type index: int | None
+
+    :return: None
+    :rtype: None
+    """
+    print(f"{'=' * 50}")
+    if index is not None:
+        print(f"{index}. Node ID: {node_id}")
+    else:
+        print(f"Node ID: {node_id}")
+    print(f"{'=' * 50}")
+
+    # Print connectivity status
+    status = node_info.get('status', {})
+    connectivity = status.get('connectivity', {})
+    connected = connectivity.get('connected', False)
+    timestamp = connectivity.get('timestamp', 0)
+
+    if connected:
+        print(f"\nStatus: Online")
+    else:
+        if timestamp:
+            timestamp_str = datetime.datetime.fromtimestamp(timestamp/1000).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nStatus: Offline since {timestamp_str}")
+        else:
+            print(f"\nStatus: Offline")
+
+    # Print config information
+    config = node_info.get('config', {})
+    print(f"\nConfig:")
+
+    # Print node info
+    info = config.get('info', {})
+    if info:
+        print(f"  Info:")
+        print(f"    Name: {info.get('name', 'N/A')}")
+        print(f"    Type: {info.get('type', 'N/A')}")
+        print(f"    Model: {info.get('model', 'N/A')}")
+        print(f"    Firmware Version: {info.get('fw_version', 'N/A')}")
+
+    # Print node-level attributes if any
+    attributes = config.get('attributes', [])
+    if attributes:
+        print(f"\n  Attributes:")
+        for attr in attributes:
+            print(f"    {attr.get('name', 'N/A')}: {attr.get('value', 'N/A')}")
+
+    # Get params to use later
+    params = node_info.get('params', {})
+
+    # Print devices information with their params
+    devices = config.get('devices', [])
+    if devices:
+        print(f"\n  Devices:")
+        for i, device in enumerate(devices):
+            device_name = device.get('name', 'N/A')
+            print(f"    Device {i+1}:")
+            print(f"      Name: {device_name}")
+            print(f"      Type: {device.get('type', 'N/A')}")
+
+            # Print device attributes if any
+            attributes = device.get('attributes', [])
+            if attributes:
+                print(f"      Attributes:")
+                for attr in attributes:
+                    print(f"        {attr.get('name', 'N/A')}: {attr.get('data_type', 'N/A')}")
+
+            # Print device parameters with their types
+            if device_name in params:
+                print(f"      Parameters:")
+                device_params = params.get(device_name, {})
+                # Find parameter types from the device config
+                param_types = {}
+                for param_config in device.get('params', []):
+                    param_types[param_config.get('name')] = param_config.get('type', 'N/A')
+
+                for param_name, param_value in device_params.items():
+                    param_type = param_types.get(param_name, 'N/A')
+                    print(f"        {param_name}: {param_value} ({param_type})")
+
+    # Print services information with their params
+    services = config.get('services', [])
+    if services:
+        print(f"\n  Services:")
+        for i, service in enumerate(services):
+            service_name = service.get('name', 'N/A')
+            print(f"    Service {i+1}:")
+            print(f"      Name: {service_name}")
+            print(f"      Type: {service.get('type', 'N/A')}")
+
+            # Print service parameters with their types
+            if service_name in params:
+                print(f"      Parameters:")
+                service_params = params.get(service_name, {})
+                # Find parameter types from the service config
+                param_types = {}
+                for param_config in service.get('params', []):
+                    param_types[param_config.get('name')] = param_config.get('type', 'N/A')
+
+                for param_name, param_value in service_params.items():
+                    param_type = param_types.get(param_name, 'N/A')
+
+                    # Format schedules if this is the Schedules parameter
+                    if param_name == "Schedules" and param_type == "esp.param.schedules" and isinstance(param_value, list):
+                        print(f"        {param_name}: ({param_type})")
+                        if param_value:
+                            for idx, schedule in enumerate(param_value):
+                                print(f"          Schedule {idx+1}:")
+                                formatted_schedule = _format_schedule(schedule)
+                                for line in formatted_schedule.split('\n'):
+                                    print(f"            {line}")
+                        else:
+                            print(f"          No schedules defined")
+                    else:
+                        print(f"        {param_name}: {param_value} ({param_type})")
+
+    # Print additional metadata
+    if node_info.get('metadata'):
+        print(f"\nMetadata: {json.dumps(node_info.get('metadata'), indent=2)}")
+
+    if node_info.get('tags'):
+        print(f"\nTags: {', '.join(node_info.get('tags'))}")
+
+    # Only show Node Type if it has a value
+    node_type = node_info.get('node_type')
+    if node_type and node_type != 'N/A':
+        print(f"\nNode Type: {node_type}")
+
+    print(f"User Role: {node_info.get('role', 'N/A')}")
+    print(f"Is Primary: {node_info.get('primary', False)}")
+    print(f"Is Matter: {node_info.get('is_matter', False)}")
+
+    if node_info.get('mapping_timestamp'):
+        mapping_time = datetime.datetime.fromtimestamp(node_info.get('mapping_timestamp')).strftime('%Y-%m-%d %H:%M:%S')
+        print(f"Mapping Timestamp: {mapping_time}")
+
+    # Only print Admin Access if it exists and is not N/A
+    admin_access = node_info.get('admin_access')
+    if admin_access and admin_access != 'N/A':
+        print(f"Admin Access: {admin_access}")
+
+def get_schedules(vars=None):
+    """
+    Get schedules for all nodes associated with the user.
+
+    :param vars: No Parameters passed, defaults to `None`
+    :type vars: dict | None
+
+    :raises Exception: If there is an HTTP issue while getting schedules
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        s = session.Session()
+        schedules = s.get_schedules()
+    except Exception as get_schedules_err:
+        log.error(get_schedules_err)
+    else:
+        if len(schedules.keys()) == 0:
+            print('User is not associated with any schedules.')
+            return
+        for key in schedules.keys():
+            print(schedules[key].get_nodeid())
     return
 
 def _check_user_input(node_ids_str):
