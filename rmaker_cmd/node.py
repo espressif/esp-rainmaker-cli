@@ -55,6 +55,13 @@ def _format_schedule(schedule):
 
     schedule_str.append(f"Name: {name} (ID: {schedule_id}, {status})")
 
+    # Add info and flags if present
+    if 'info' in schedule:
+        schedule_str.append(f"Info: {schedule.get('info')}")
+
+    if 'flags' in schedule:
+        schedule_str.append(f"Flags: {schedule.get('flags')}")
+
     # Format triggers
     if 'triggers' in schedule:
         for trigger_idx, trigger in enumerate(schedule.get('triggers', [])):
@@ -122,8 +129,32 @@ def _format_schedule(schedule):
                 if trigger.get('r', False):
                     trigger_str.append("Repeats yearly")
 
-            # Handle relative seconds
-            if 'rsec' in trigger:
+            # Handle timestamp and relative seconds fields
+            if 'ts' in trigger and 'rsec' in trigger:
+                ts_value = trigger.get('ts', 0)
+                rsec_value = trigger.get('rsec', 0)
+
+                # Always show rsec value
+                trigger_str.append(f"After {rsec_value} seconds")
+
+                # Only show timestamp if it's valid
+                if ts_value > 1000000000:  # Valid timestamp (after year 2001)
+                    ts_datetime = datetime.datetime.fromtimestamp(ts_value)
+                    formatted_ts = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                    trigger_str.append(f"Triggers at: {formatted_ts} (local time)")
+                # Don't print anything about invalid timestamps
+
+            # Handle timestamp alone (no rsec)
+            elif 'ts' in trigger:
+                ts_value = trigger.get('ts', 0)
+                # Only show if ts is valid
+                if ts_value > 1000000000:  # Valid timestamp (after year 2001)
+                    ts_datetime = datetime.datetime.fromtimestamp(ts_value)
+                    formatted_ts = ts_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                    trigger_str.append(f"Triggers at: {formatted_ts} (local time)")
+
+            # Handle relative seconds alone (no ts)
+            elif 'rsec' in trigger:
                 rsec_value = trigger.get('rsec', 0)
                 trigger_str.append(f"After {rsec_value} seconds")
 
@@ -193,14 +224,14 @@ def get_node_details(vars=None):
         if node_id:
             # Make targeted API call for a single node
             node_details = s.get_node_details_by_id(node_id)
-            
+
             if not node_details or 'node_details' not in node_details or len(node_details['node_details']) == 0:
                 print(f'No details available for node {node_id}.')
                 return
         else:
             # Get all nodes
             node_details = s.get_node_details()
-            
+
             if not node_details or 'node_details' not in node_details or len(node_details['node_details']) == 0:
                 print('No node details available or user is not associated with any nodes.')
                 return
@@ -209,7 +240,7 @@ def get_node_details(vars=None):
             # Print raw JSON if requested
             print(json.dumps(node_details, indent=4))
             return
-            
+
         # Print formatted node details
         for idx, node_info in enumerate(node_details['node_details'], 1):
             node_id = node_info.get('id', 'Unknown')
@@ -371,28 +402,291 @@ def _print_node_details(node_id, node_info, index=None):
 
 def get_schedules(vars=None):
     """
-    Get schedules for all nodes associated with the user.
+    Get schedule information for a specific node.
 
-    :param vars: No Parameters passed, defaults to `None`
+    :param vars: Parameters:
+                 `nodeid` as key - Node ID to fetch schedules for
     :type vars: dict | None
 
-    :raises Exception: If there is an HTTP issue while getting schedules
+    :raises Exception: If there is an HTTP issue while getting node details
 
     :return: None on Success
     :rtype: None
     """
+    if not vars or 'nodeid' not in vars:
+        print("Error: Node ID is required.")
+        return
+
+    node_id = vars['nodeid']
+
     try:
         s = session.Session()
-        schedules = s.get_schedules()
-    except Exception as get_schedules_err:
-        log.error(get_schedules_err)
-    else:
-        if len(schedules.keys()) == 0:
-            print('User is not associated with any schedules.')
+
+        # Get node details for the specific node
+        node_details = s.get_node_details_by_id(node_id)
+
+        if not node_details or 'node_details' not in node_details:
+            print(f'No details available for node {node_id}.')
             return
-        for key in schedules.keys():
-            print(schedules[key].get_nodeid())
-    return
+
+        # Find the node in the node_details array
+        node_info = None
+        for node in node_details['node_details']:
+            if node.get('id') == node_id:
+                node_info = node
+                break
+
+        if not node_info:
+            print(f'Node {node_id} not found or not associated with current user.')
+            return
+
+        # Look for schedule service and parameters
+        schedules_found = False
+
+        # First check in config for schedule service
+        if 'config' in node_info:
+            config = node_info['config']
+
+            if 'services' in config:
+                for service in config['services']:
+                    if service.get('type') == 'esp.service.schedule':
+                        schedules_found = True
+                        print(f"Node supports schedules.")
+                        break
+
+        if not schedules_found:
+            print(f"Node {node_id} does not support schedules.")
+            return
+
+        # Check in params for actual schedule data
+        schedule_data_found = False
+        if 'params' in node_info:
+            params = node_info['params']
+
+            # Look through all devices and services for schedules
+            for entity_name, entity_params in params.items():
+                for param_name, param_value in entity_params.items():
+                    # Check if this is a schedules parameter
+                    if isinstance(param_value, list) and param_name == "Schedules":
+                        schedule_data_found = True
+
+                        if not param_value:
+                            print("No schedules configured for this node.")
+                            return
+
+                        # Print each schedule
+                        for idx, schedule in enumerate(param_value):
+                            print(f"\nSchedule {idx+1}:")
+                            print(_format_schedule(schedule))
+
+        if not schedule_data_found:
+            print("No schedules configured for this node.")
+
+    except Exception as e:
+        log.error(e)
+        print(f"Error retrieving schedules: {str(e)}")
+
+def set_schedule(vars=None):
+    """
+    Set schedule for a specific node. This function supports adding, editing, removing, enabling, and disabling schedules.
+
+    :param vars: Parameters:
+                 `nodeid` as key - Node ID to set schedule for
+                 `operation` as key - Operation to perform (add, edit, remove, enable, disable)
+                 `id` as key - Schedule ID (required for edit, remove, enable, disable)
+                 `name` as key - Schedule name (required for add, optional for edit)
+                 `trigger` as key - JSON string of trigger configuration (required for add, optional for edit)
+                 `action` as key - JSON string of action configuration (required for add, optional for edit)
+                 `info` as key - Additional information (optional)
+                 `flags` as key - General purpose flags (optional)
+    :type vars: dict | None
+
+    :raises Exception: If there is an HTTP issue while setting schedule
+
+    :return: None on Success
+    :rtype: None
+    """
+    if not vars or 'nodeid' not in vars:
+        print("Error: Node ID is required.")
+        return
+
+    if 'operation' not in vars:
+        print("Error: Operation is required (add, edit, remove, enable, disable).")
+        return
+
+    node_id = vars['nodeid']
+    operation = vars['operation'].lower()
+
+    # Validate operation
+    valid_operations = ['add', 'edit', 'remove', 'enable', 'disable']
+    if operation not in valid_operations:
+        print(f"Error: Invalid operation. Must be one of {', '.join(valid_operations)}.")
+        return
+
+    # For operations other than 'add', id is required
+    if operation != 'add' and ('id' not in vars or vars['id'] is None):
+        print("Error: Schedule ID is required for this operation.")
+        return
+
+    # For 'add' operation, name, trigger, and action are required
+    if operation == 'add':
+        if 'name' not in vars or vars['name'] is None:
+            print("Error: Schedule name is required for add operation.")
+            return
+        if 'trigger' not in vars or vars['trigger'] is None:
+            print("Error: Trigger configuration is required for add operation. Please provide it with --trigger option.")
+            print("Example: --trigger '{\"m\": 1110, \"d\": 31}' for 6:30 PM on weekdays")
+            return
+        if 'action' not in vars or vars['action'] is None:
+            print("Error: Action configuration is required for add operation. Please provide it with --action option.")
+            print("Example: --action '{\"Light\": {\"Power\": true}}' to turn on a light")
+            return
+
+    # Create the schedule data structure
+    schedule = {}
+
+    # Set operation first
+    schedule['operation'] = operation
+
+    # Set ID field
+    if operation != 'add' and 'id' in vars:
+        schedule['id'] = vars['id']
+
+    if operation == 'add':
+        # Always generate a random 4-character hexadecimal ID for new schedules
+        import random
+        generated_id = ''.join(random.choice('0123456789ABCDEF') for _ in range(4))
+        schedule['id'] = generated_id
+
+    # For simple operations like enable/disable/remove, we only need id and operation
+    if operation in ['enable', 'disable', 'remove']:
+        # Create the full params object
+        params = {
+            "Schedule": {
+                "Schedules": [schedule]
+            }
+        }
+
+        try:
+            # Set the parameters on the node
+            n = node.Node(node_id, session.Session())
+            response = n.set_node_params(params)
+
+            # Determine if the operation was successful
+            success = False
+            if isinstance(response, dict) and response.get('status', '').lower() == 'success':
+                success = True
+            elif isinstance(response, bool) and response:
+                success = True
+
+            if success:
+                op_str = {
+                    'add': 'added',
+                    'edit': 'updated',
+                    'remove': 'removed',
+                    'enable': 'enabled',
+                    'disable': 'disabled'
+                }.get(operation, operation)
+
+                print(f"Schedule successfully {op_str}.")
+            else:
+                if isinstance(response, dict):
+                    print(f"Error setting schedule: {response.get('description', 'Unknown error')}")
+                else:
+                    print(f"Error setting schedule: Unexpected response format")
+
+        except Exception as e:
+            log.error(e)
+            print(f"Error setting schedule: {str(e)}")
+
+        return
+
+    # For add and edit operations, set additional fields
+    if 'name' in vars:
+        schedule['name'] = vars['name']
+
+    # Set trigger if provided
+    if 'trigger' in vars and vars['trigger'] is not None:
+        try:
+            trigger_data = json.loads(vars['trigger'])
+
+            # If this is an add operation with rsec but no ts, add current timestamp
+            if operation == 'add' and 'rsec' in trigger_data and 'ts' not in trigger_data:
+                import time
+                trigger_data['ts'] = int(time.time())
+
+            schedule['triggers'] = [trigger_data]
+        except json.JSONDecodeError:
+            print("Error: Invalid JSON format for trigger configuration.")
+            return
+    elif operation == 'add':
+        # For add operation, trigger is required
+        print("Error: Trigger configuration is required for add operation. Please provide it with --trigger option.")
+        print("Example: --trigger '{\"m\": 1110, \"d\": 31}' for 6:30 PM on weekdays")
+        return
+
+    # Set action if provided
+    if 'action' in vars and vars['action'] is not None:
+        try:
+            action_data = json.loads(vars['action'])
+            schedule['action'] = action_data
+        except json.JSONDecodeError:
+            print("Error: Invalid JSON format for action configuration.")
+            return
+    elif operation == 'add':
+        # For add operation, action is required
+        print("Error: Action configuration is required for add operation. Please provide it with --action option.")
+        print("Example: --action '{\"Light\": {\"Power\": true}}' to turn on a light")
+        return
+
+    # Set additional fields if provided
+    if 'info' in vars:
+        schedule['info'] = vars['info']
+
+    if 'flags' in vars and vars['flags'] is not None and vars['flags'].isdigit():
+        schedule['flags'] = int(vars['flags'])
+
+    # Create the full params object
+    params = {
+        "Schedule": {
+            "Schedules": [schedule]
+        }
+    }
+
+    try:
+        # Set the parameters on the node
+        n = node.Node(node_id, session.Session())
+        response = n.set_node_params(params)
+
+        # Determine if the operation was successful
+        success = False
+        if isinstance(response, dict) and response.get('status', '').lower() == 'success':
+            success = True
+        elif isinstance(response, bool) and response:
+            success = True
+
+        if success:
+            op_str = {
+                'add': 'added',
+                'edit': 'updated',
+                'remove': 'removed',
+                'enable': 'enabled',
+                'disable': 'disabled'
+            }.get(operation, operation)
+
+            if operation == 'add':
+                print(f"Schedule successfully {op_str} with ID: {generated_id}")
+            else:
+                print(f"Schedule successfully {op_str}.")
+        else:
+            if isinstance(response, dict):
+                print(f"Error setting schedule: {response.get('description', 'Unknown error')}")
+            else:
+                print(f"Error setting schedule: Unexpected response format")
+
+    except Exception as e:
+        log.error(e)
+        print(f"Error setting schedule: {str(e)}")
 
 def _check_user_input(node_ids_str):
     log.debug("Check user input....")
