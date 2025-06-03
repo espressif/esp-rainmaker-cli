@@ -24,11 +24,30 @@ from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
 
+# Import the version
+from rainmaker.version import VERSION
+
+def display_version(vars=None):
+    """
+    Display the current version of ESP RainMaker CLI.
+
+    :param vars: No parameters passed, defaults to `None`
+    :type vars: dict | None
+
+    :return: None
+    :rtype: None
+    """
+    print(f"ESP RainMaker CLI v{VERSION}")
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(func=None)
     subparsers = parser.add_subparsers(help='Functions')
+
+    # Version command
+    version_parser = subparsers.add_parser("version",
+                                          help="Display ESP RainMaker CLI version")
+    version_parser.set_defaults(func=display_version)
 
     configure_parser = subparsers.add_parser("configure",
                                              help="Configure ESP RainMaker")
