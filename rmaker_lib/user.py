@@ -28,14 +28,19 @@ class User:
     :param username: Name of User
     :type username: str
     """
-    def __init__(self, username):
+    def __init__(self, username, config=None):
         """
         Instantiate user with username.
+        
+        :param username: Name of User
+        :type username: str
+        :param config: Configuration object to use, defaults to None
+        :type config: configmanager.Config
         """
         log.info("Initialising user " + username)
         self.__username = username
         self.__passwd_change_token = ''
-        self.config = configmanager.Config()
+        self.config = config if config is not None else configmanager.Config()
         self.__request_header = {'content-type': 'application/json'}
 
     def signup_request(self, password):

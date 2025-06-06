@@ -26,11 +26,13 @@ class Session:
     """
     Session class for logged in user.
     """
-    def __init__(self):
+    def __init__(self, profile_override=None):
         """
         Instantiate session for logged in user.
+        
+        :param profile_override: Optional profile name to use instead of current profile.
         """
-        self.config = configmanager.Config()
+        self.config = configmanager.Config(profile_override=profile_override)
         log.info("Initialising session for user")
         
         # Check if user is logged in to current profile

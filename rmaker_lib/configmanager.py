@@ -48,14 +48,23 @@ class Config:
     Now with profile-aware support for multi-profile management.
     """
 
-    def __init__(self, config_dir=None):
+    def __init__(self, config_dir=None, profile_override=None):
         """
         Initialize Config with ProfileManager integration.
         
         :param config_dir: Optional custom config directory. For testing purposes.
+        :param profile_override: Optional profile name to use instead of current profile.
         """
         self.profile_manager = ProfileManager(config_dir)
-        self.current_profile = self.profile_manager.get_current_profile()
+        self.profile_override = profile_override
+        
+        if profile_override:
+            # Validate that the override profile exists
+            if not self.profile_manager.profile_exists(profile_override):
+                raise ValueError(f"Profile '{profile_override}' does not exist")
+            self.current_profile = profile_override
+        else:
+            self.current_profile = self.profile_manager.get_current_profile()
         
         # For backward compatibility, compute the legacy config file path
         self.config_dir = self.profile_manager.config_dir
@@ -67,6 +76,8 @@ class Config:
 
     def switch_profile(self, profile_name):
         """Switch to a different profile."""
+        if self.profile_override:
+            raise ValueError("Cannot switch profile when using profile override")
         self.profile_manager.set_current_profile(profile_name)
         self.current_profile = profile_name
 

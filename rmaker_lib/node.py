@@ -44,7 +44,8 @@ class Node:
         try:
             self.request_header = {'content-type': 'application/json',
                                    'Authorization': session.id_token}
-            self.config = configmanager.Config()
+            # Use the config from session to maintain profile override
+            self.config = session.config
         except AttributeError:
             raise InvalidClassInput(session, 'Invalid Session Input.\
                                               Expected: type <session object>.\

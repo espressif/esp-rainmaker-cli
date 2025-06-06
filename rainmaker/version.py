@@ -15,4 +15,4 @@
 # limitations under the License.
 
 # This file contains the version information for the ESP RainMaker CLI
-VERSION = "1.2.0"
+VERSION = "1.3.0"

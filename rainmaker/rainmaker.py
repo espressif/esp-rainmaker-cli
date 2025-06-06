@@ -40,6 +40,18 @@ def display_version(vars=None):
     """
     print(f"ESP RainMaker CLI v{VERSION}")
 
+def add_profile_argument(parser):
+    """
+    Add --profile argument to a parser.
+    
+    :param parser: The argument parser to add the profile argument to
+    :type parser: argparse.ArgumentParser
+    """
+    parser.add_argument('--profile',
+                       type=str,
+                       metavar='<profile_name>',
+                       help='Use specified profile instead of current active profile')
+
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(func=None)
@@ -114,6 +126,7 @@ def main():
                                type=str,
                                metavar='<user_name>',
                                help='Email address or phone number of the user')
+    add_profile_argument(signup_parser)
     signup_parser.set_defaults(func=signup)
 
     login_parser = subparsers.add_parser("login",
@@ -130,11 +143,13 @@ def main():
                               type=str,
                               metavar='<password>',
                               help='Password of the user (for CI integration)')
+    add_profile_argument(login_parser)
     login_parser.set_defaults(func=login)
 
 
     logout_parser = subparsers.add_parser("logout",
                                          help="Logout current (logged-in) user")
+    add_profile_argument(logout_parser)
     logout_parser.set_defaults(func=logout)
 
 
@@ -144,11 +159,13 @@ def main():
                                         type=str,
                                         metavar='<user_name>',
                                         help='Email address/Phone number of the user')
+    add_profile_argument(forgot_password_parser)
     forgot_password_parser.set_defaults(func=forgot_password)
 
     getnodes_parser = subparsers.add_parser('getnodes',
                                             help='List all nodes associated'
                                                   ' with the user')
+    add_profile_argument(getnodes_parser)
     getnodes_parser.set_defaults(func=get_nodes)
 
     getnodedetails_parser = subparsers.add_parser('getnodedetails',
@@ -162,6 +179,7 @@ def main():
     getnodedetails_parser.add_argument('--raw',
                                     action='store_true',
                                     help='Print raw JSON output')
+    add_profile_argument(getnodedetails_parser)
     getnodedetails_parser.set_defaults(func=get_node_details)
 
     getschedules_parser = subparsers.add_parser('getschedules',
@@ -170,6 +188,7 @@ def main():
                                       type=str,
                                       metavar='<nodeid>',
                                       help='Node ID for the node')
+    add_profile_argument(getschedules_parser)
     getschedules_parser.set_defaults(func=get_schedules)
 
     setschedule_parser = subparsers.add_parser('setschedule',
@@ -205,6 +224,7 @@ def main():
     setschedule_parser.add_argument('--flags',
                                   type=str,
                                   help='General purpose flags for the schedule (optional)')
+    add_profile_argument(setschedule_parser)
     setschedule_parser.set_defaults(func=set_schedule)
 
     # Node Config
@@ -214,6 +234,7 @@ def main():
                                       type=str,
                                       metavar='<nodeid>',
                                       help='Node ID for the node')
+    add_profile_argument(getnodeconfig_parser)
     getnodeconfig_parser.set_defaults(func=get_node_config)
 
     getnodestatus_parser = subparsers.add_parser('getnodestatus',
@@ -223,6 +244,7 @@ def main():
                                       type=str,
                                       metavar='<nodeid>',
                                       help='Node ID for the node')
+    add_profile_argument(getnodestatus_parser)
     getnodestatus_parser.set_defaults(func=get_node_status)
 
     setparams_parser = subparsers.add_parser('setparams',
@@ -242,6 +264,9 @@ def main():
                                   help='JSON data containing parameters\
                                         to be set. Note: Enter JSON data\
                                         in single quotes')
+    # Note: setparams_parser is mutually exclusive group, so we add profile to the parent
+    setparams_main_parser = subparsers._name_parser_map['setparams']
+    add_profile_argument(setparams_main_parser)
     setparams_parser.set_defaults(func=set_params)
 
     getparams_parser = subparsers.add_parser('getparams',
@@ -250,6 +275,7 @@ def main():
                                   type=str,
                                   metavar='<nodeid>',
                                   help='Node ID for the node')
+    add_profile_argument(getparams_parser)
     getparams_parser.set_defaults(func=get_params)
 
     remove_node_parser = subparsers.add_parser('removenode',
@@ -258,6 +284,7 @@ def main():
                                     type=str,
                                     metavar='<nodeid>',
                                     help='Node ID for the node')
+    add_profile_argument(remove_node_parser)
     remove_node_parser.set_defaults(func=remove_node)
 
     provision_parser = subparsers.add_parser('provision',
@@ -267,12 +294,14 @@ def main():
                                   type=str,
                                   metavar='<pop>',
                                   help='Proof of possesion for the node')
+    add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
 
     getmqtthost_parser = subparsers.add_parser('getmqtthost',
                                                help='Get the MQTT Host URL'
                                                      ' to be used in the'
                                                      ' firmware')
+    add_profile_argument(getmqtthost_parser)
     getmqtthost_parser.set_defaults(func=get_mqtt_host)
 
     claim_parser = subparsers.add_parser('claim',
@@ -304,6 +333,7 @@ def main():
                               type=str,
                               help='Directory to store the claim files.\nThe outdir can be specified using the environment variable RM_CLI_OUT_DIR as well.\nDefault: ~/.espressif/rainmaker/claim_data/')
 
+    add_profile_argument(claim_parser)
     claim_parser.set_defaults(func=claim_node, parser=claim_parser)
 
     test_parser = subparsers.add_parser('test',
@@ -312,6 +342,7 @@ def main():
     test_parser.add_argument('--addnode',
                              metavar='<nodeid>',
                              help='Add user node mapping')
+    add_profile_argument(test_parser)
     test_parser.set_defaults(func=test)
 
     upload_ota_image_parser = subparsers.add_parser('otaupgrade',
@@ -324,10 +355,12 @@ def main():
                                         type=str,
                                         metavar='<ota_image_path>',
                                         help='OTA Firmware image path')
+    add_profile_argument(upload_ota_image_parser)
     upload_ota_image_parser.set_defaults(func=ota_upgrade)
 
     user_info_parser = subparsers.add_parser("getuserinfo",
                                          help="Get details of current (logged-in) user")
+    add_profile_argument(user_info_parser)
     user_info_parser.set_defaults(func=get_user_details)
 
     # Node Sharing
@@ -361,6 +394,7 @@ def main():
                                "format: <nodeid1>,<nodeid2>,...",
                                required=True)
 
+    add_profile_argument(add_op_parser)
     add_op_parser.set_defaults(func=node_sharing_ops, parser=add_op_parser)
 
 
@@ -383,6 +417,7 @@ def main():
                                        "format: <nodeid1>,<nodeid2>,...",
                                        required=True)
 
+    add_profile_argument(remove_user_op_parser)
     remove_user_op_parser.set_defaults(func=node_sharing_ops, parser=remove_user_op_parser)
 
 
@@ -400,6 +435,7 @@ def main():
                                        help='Id of the sharing request'
                                        '\nYou can use {list_requests} command to list pending request(s)')
 
+    add_profile_argument(add_accept_op_parser)
     add_accept_op_parser.set_defaults(func=node_sharing_ops, parser=add_accept_op_parser)
 
     # Decline sharing request
@@ -416,6 +452,7 @@ def main():
                                        help='Id of the sharing request'
                                        '\nYou can use {list_requests} command to list pending request(s)')
 
+    add_profile_argument(add_decline_op_parser)
     add_decline_op_parser.set_defaults(func=node_sharing_ops, parser=add_decline_op_parser)
 
     # Cancel pending requests
@@ -431,6 +468,7 @@ def main():
                                             help='Id of the sharing request\nYou can use {list_requests} command to list pending request(s)',
                                             required=True)
 
+    add_profile_argument(cancel_request_op_parser)
     cancel_request_op_parser.set_defaults(func=node_sharing_ops, parser=cancel_request_op_parser)
 
     # List sharing details for node(s) associated with user
@@ -446,6 +484,7 @@ def main():
                                      help='Node Id of the node.\nIf provided, will list sharing details of a particular node'
                                      '\nDefault: List details of all node(s)')
 
+    add_profile_argument(list_nodes_op_parser)
     list_nodes_op_parser.set_defaults(func=node_sharing_ops, parser=list_nodes_op_parser)
 
     # List details of sharing request(s)
@@ -470,6 +509,7 @@ def main():
                                        help='Id of the sharing request\nIf provided, will list details of a particular request'
                                        '\nDefault: List details of all request(s)')
 
+    add_profile_argument(list_request_op_parser)
     list_request_op_parser.set_defaults(func=node_sharing_ops, parser=list_request_op_parser)
 
     # POST command response
@@ -490,6 +530,7 @@ def main():
                                         type=int,
                                         help="Time in seconds till which the command response request will be valid",
                                         default=30)
+    add_profile_argument(create_cmd_resp_parser)
     create_cmd_resp_parser.set_defaults(func=create_cmd_request)
 
 
@@ -510,6 +551,7 @@ def main():
     get_cmd_resp_parser.add_argument("--num_records",
                                     type=int,
                                     help="Number of requests to get")
+    add_profile_argument(get_cmd_resp_parser)
     get_cmd_resp_parser.set_defaults(func=get_cmd_requests)
 
     # Set parsers to print help for associated commands

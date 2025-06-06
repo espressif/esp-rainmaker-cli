@@ -19,6 +19,7 @@ import sys
 try:
     from rmaker_lib import session, node, configmanager
     from rmaker_lib.logger import log
+    from rmaker_lib.profile_utils import get_session_with_profile
 except ImportError as err:
     print("Failed to import ESP Rainmaker library. " + str(err))
     raise err
@@ -63,6 +64,7 @@ def test(vars=None):
 
     :param vars:
         `addnode` as key - Node ID of node to be mapped to user,\n
+        `profile` as key - Profile to use for the operation,\n
         defaults to `None`
     :type vars: dict
 
@@ -72,7 +74,9 @@ def test(vars=None):
         print('Error: The following arguments are required: --addnode\n'
               'Check usage: rainmaker.py [-h]\n')
         sys.exit(0)
-    node_object = node.Node(node_id, session.Session())
+    
+    curr_session = get_session_with_profile(vars or {})
+    node_object = node.Node(node_id, curr_session)
     request_id, secret_key = add_node(node_object)
     config = configmanager.Config()
     user_id = config.get_user_id()

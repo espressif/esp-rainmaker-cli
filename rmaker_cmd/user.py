@@ -16,15 +16,27 @@ import sys
 import re
 import getpass
 import time
+import json
+import os
+from pathlib import Path
 
 try:
     from rmaker_lib import user, configmanager, session, serverconfig
     from rmaker_lib.logger import log
+    from rmaker_lib.exceptions import SSLError, \
+        NetworkError, \
+        RequestTimeoutError, \
+        InvalidConfigError, \
+        InvalidJSONError, \
+        HttpErrorResponse, \
+        ExpiredSessionError, \
+        AuthenticationError
 except ImportError as err:
     print("Failed to import ESP Rainmaker library. " + str(err))
     raise err
 
 from rmaker_cmd.browserlogin import browser_login
+from rmaker_lib.profile_utils import get_session_with_profile, get_config_with_profile
 
 MAX_PASSWORD_CHANGE_ATTEMPTS = 3
 
@@ -33,7 +45,8 @@ def signup(vars=None):
     """
     User signup to the ESP Rainmaker.
 
-    :param vars: `user_name` as key - Email address/Phone number of the user, defaults to `None`
+    :param vars: `user_name` as key - Email address/Phone number of the user
+                 `profile` as key - Profile to use for signup (optional)
     :type vars: dict
 
     :raises Exception: If there is any issue in signup for user
@@ -42,14 +55,14 @@ def signup(vars=None):
     :rtype: None
     """
     
-    config = configmanager.Config()
+    config = get_config_with_profile(vars or {})
     current_profile = config.get_current_profile_name()
     
     print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
     time.sleep(3)
     
     log.info('Signing up the user ' + vars['user_name'])
-    u = user.User(vars['user_name'])
+    u = user.User(vars['user_name'], config)
     password = get_password()
     try:
         status = u.signup_request(password)
@@ -75,7 +88,10 @@ def login(vars=None):
     """
     First time login of the user.
 
-    :param vars: `email` as key - Email address of the user, defaults to `None`
+    :param vars: `email` as key - Email address of the user
+                 `user_name` as key - Email address or phone number of the user
+                 `password` as key - Password (for CI integration)
+                 `profile` as key - Profile to login to (optional)
     :type vars: dict
 
     :raises Exception: If there is any issue in login for user
@@ -83,16 +99,40 @@ def login(vars=None):
     :return: None on Success and Failure
     :rtype: None
     """
-    log.info('Signing in the user. Username  ' + str(vars['user_name']))
-    config = configmanager.Config()
-    current_profile = config.get_current_profile_name()
+    # Determine which profile to use
+    profile_to_use = vars.get('profile') if vars else None
     
-    print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
+    if profile_to_use:
+        # If a specific profile is requested, validate it exists
+        try:
+            config = configmanager.Config()
+            if not config.profile_manager.profile_exists(profile_to_use):
+                print(f"❌ Profile '{profile_to_use}' does not exist.")
+                print("Use 'esp-rainmaker-cli profile list' to see available profiles.")
+                return
+            
+            # Show which profile we're logging into
+            print(f'Logging into profile: \033[1m\033[32m{profile_to_use}\033[0m\033[0m')
+            
+            # Create a config with profile override for login
+            config = configmanager.Config(profile_override=profile_to_use)
+        except Exception as e:
+            log.error(f"Error accessing profile '{profile_to_use}': {e}")
+            return
+    else:
+        # Use current profile
+        config = configmanager.Config()
+        current_profile = config.get_current_profile_name()
+        print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
+    
     time.sleep(3)
 
+    # Get the profile we're working with
+    target_profile = profile_to_use if profile_to_use else config.get_current_profile_name()
+    
     # Check if this is a custom profile
     try:
-        profile_config = config.profile_manager.get_profile_config(current_profile)
+        profile_config = config.profile_manager.get_profile_config(target_profile)
         is_custom_profile = not profile_config.get('builtin', False)
         
         if is_custom_profile and not profile_config.get('ui_login_supported', False):
@@ -105,111 +145,113 @@ def login(vars=None):
         log.debug(f"Failed to get profile config: {e}")
 
     # Set email-id
-    user_name = vars['user_name']
+    user_name = vars.get('user_name') if vars else None
     if not user_name:
-        user_name = vars['email']
+        user_name = vars.get('email') if vars else None
     log.info('Logging in user: {}'.format(user_name))
 
     # Check user current creds exist
     resp_filename = config.check_user_creds_exists()
-
-    # If current creds exist, ask user for ending current session
     if resp_filename:
+        try:
+            user_name_config = config.get_user_name()
+            log.info(f'User already logged in for profile {target_profile}: {user_name_config}')
+        except Exception:
+            log.info(f'Session found for profile {target_profile}')
 
-        # Get email-id of current logged-in user
-        curr_user_name = config.get_user_name()
-        log.info('Logging out user: {}'.format(curr_user_name))
+        log.debug("User login status is active.")
 
-        # Get user input
-        input_resp = config.get_input_to_end_session(curr_user_name)
-        if not input_resp:
+        # Print user details
+        print(f'\nUser login session found for profile {target_profile}.')
+        
+        user_input = input(
+            f"Do you want to end the session and login again with a different user (Y/N)? :")
+        
+        if user_input not in ["Y", "y"]:
+            try:
+                user_name_config = config.get_user_name()
+                print(f"User '{user_name_config}' in profile '{target_profile}' is already logged in.")
+            except Exception:
+                print(f"Session exists for profile '{target_profile}'.")
+            return
+        
+        config.remove_curr_login_creds()
+        print("Previous login session ended successfully.")
+
+    # Check if we have a password provided
+    password = vars.get('password') if vars else None
+    
+    if user_name and password:
+        # Programmatic login with credentials
+        try:
+            user_obj = user.User(user_name, config)
+            session_obj = user_obj.login(password)
+            print("Login successful!")
+            return
+        except AuthenticationError:
+            print("Authentication Failed. Incorrect username or password.")
+            return
+        except Exception as e:
+            log.error(f"Login failed: {e}")
             return
 
-        # Remove current login creds
-        ret_val = config.remove_curr_login_creds()
-        if ret_val is None:
-            print("Failed to end previous login session. Exiting.")
+    if user_name:
+        # Interactive login with username
+        print(f"Performing interactive login for user: {user_name}")
+        print("Password can also be set in environment variable: $ESP_RAINMAKER_PASSWORD")
+        
+        password = os.getenv('ESP_RAINMAKER_PASSWORD')
+        if not password:
+            password = getpass.getpass("Please enter the password: ")
+        
+        if not password:
+            print("Password is required for login.")
+            return
+        
+        try:
+            user_obj = user.User(user_name, config)
+            session_obj = user_obj.login(password)
+            print("Login successful!")
+            return
+        except AuthenticationError:
+            print("Authentication Failed. Incorrect username or password.")
+            return
+        except Exception as e:
+            log.error(f"Login failed: {e}")
             return
     else:
-        log.debug("Current login creds not found")
-
-    # For custom profiles, force user_name login
-    if user_name is None:
-        try:
-            profile_config = config.profile_manager.get_profile_config(current_profile)
-            is_custom_profile = not profile_config.get('builtin', False)
-            
-            if is_custom_profile:
-                log.error('Custom profiles require --user_name for login. UI-based login is not supported for custom profiles.')
-                print('Please use: rainmaker login --user_name <your_email>')
-                return
-        except:
-            pass
-        
-        browser_login()
-        return
-        
-    try:
-        u = user.User(user_name)
-        u.login(password=vars.get('password'))
-        print('Login Successful')
-    except Exception as login_err:
-        log.error(login_err)
-        
-    return
+        # Browser-based login
+        log.info("Starting browser login flow")
+        print('Secure browser login')
+        browser_login(config)
 
 
 def logout(vars=None):
     """
-    Logout of the current session.
-
-    :raises Exception: If there is any issue in logout for user
-
+    Logout current (logged-in) user
+    
+    :param vars: Optional parameters including 'profile'
+    :type vars: dict | None
+    
     :return: None on Success and Failure
     :rtype: None
     """
-    log.info('Logging out current logged-in user')
-
-    # Removing the creds stored locally
-    log.debug("Removing creds stored locally, invalidating token")
-    config = configmanager.Config()
-
-    # Get email-id/phone no. of current logged-in user
-    user_name = config.get_user_name()
-    log.info('Logging out user: {}'.format(user_name))
-
-    # Ask user for ending current session
-    # Get user input
-    input_resp = config.get_input_to_end_session(user_name)
-    if not input_resp:
-        return
-
-    # Call Logout API
     try:
-        curr_session = session.Session()
-        status_resp = curr_session.logout()
-        log.debug("Logout API successful")
+        log.debug('Logging out current logged-in user')
+        curr_session = get_session_with_profile(vars or {})
+        response = curr_session.logout()
+        log.debug('Logout response: %s' % response)
+        
+        # Remove current login creds for the profile being used
+        config = get_config_with_profile(vars or {})
+        config.remove_curr_login_creds()
+        print('Logout successful.')
+        return
     except Exception as logout_err:
-        log.error(logout_err)
-        return
-
-    # Check API status in response
-    if 'status' in status_resp and status_resp['status'] == 'failure':
-        print("Logout from ESP RainMaker Failed. Exiting.")
-        print("[{}]:{}".format(status_resp['error_code'], status_resp['description']))
-        return
-
-    # Remove current login creds
-    ret_val = config.remove_curr_login_creds()
-    if ret_val is None:
-        print("Logout from ESP RainMaker Failed. Exiting.")
-        return
-
-    # Logout is successful
-    print("Logged out from ESP RainMaker")
-    log.debug('Logout Successful')
-    log.debug("Local creds removed successfully")
-
+        if str(logout_err) == 'Unauthorized':
+            print('User already logged out')
+        else:
+            log.error(logout_err)
     return
 
 
@@ -217,7 +259,8 @@ def forgot_password(vars=None):
     """
     Forgot password request to reset the password.
 
-    :param vars: `user_name` as key - Email address/ phone number of the user, defaults to `None`
+    :param vars: `user_name` as key - Email address/ phone number of the user
+                 `profile` as key - Profile to use for password reset (optional)
     :type vars: dict
 
     :raises Exception: If there is an HTTP issue while
@@ -227,7 +270,7 @@ def forgot_password(vars=None):
     :rtype: None
     """
     log.info('Changing user password. Username ' + vars['user_name'])
-    config = configmanager.Config()
+    config = get_config_with_profile(vars or {})
 
     # Get email-id if present
     try:
@@ -262,7 +305,7 @@ def forgot_password(vars=None):
             print("Failed to end previous login session. Exiting.")
             return
 
-    u = user.User(vars['user_name'])
+    u = user.User(vars['user_name'], config)
     status = False
 
     try:
@@ -327,16 +370,14 @@ def get_password():
 def get_user_details(vars=None):
     """
     Get details of current logged-in user
+    
+    :param vars: Optional parameters including 'profile'
+    :type vars: dict | None
     """
-    config = configmanager.Config()
-    current_profile = config.get_current_profile_name()
-    
-    print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
-    
     try:
         # Get user details
         log.debug('Getting details of current logged-in user')
-        curr_session = session.Session()
+        curr_session = get_session_with_profile(vars or {})
         user_info = curr_session.get_user_details()
         log.debug("User details received")
     except Exception as err:

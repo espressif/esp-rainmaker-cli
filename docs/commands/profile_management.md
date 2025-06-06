@@ -108,6 +108,116 @@ esp-rainmaker-cli getparams <node_id>
 esp-rainmaker-cli setparams <node_id> --data '{"Switch": {"Power": true}}'
 ```
 
+## Temporary Profile Override
+
+### Using --profile Argument
+
+In addition to switching profiles permanently, you can temporarily override the active profile for individual commands using the `--profile` argument. This is useful for one-off operations without changing your current active profile.
+
+```bash
+# Check current profile
+esp-rainmaker-cli profile current
+# Current profile: global
+
+# Temporarily use china profile for a single command
+esp-rainmaker-cli getnodes --profile china
+
+# Current profile is still global
+esp-rainmaker-cli profile current
+# Current profile: global
+```
+
+### Available on All Commands
+
+The `--profile` argument is available on all ESP RainMaker CLI commands except profile management commands themselves:
+
+```bash
+# Node operations with profile override
+esp-rainmaker-cli getnodes --profile custom1
+esp-rainmaker-cli getparams <node_id> --profile custom1
+esp-rainmaker-cli setparams <node_id> --profile custom1 --data '{"Switch": {"Power": true}}'
+
+# User operations with profile override
+esp-rainmaker-cli sharing list --profile custom2
+esp-rainmaker-cli sharing add_user --profile custom2 --user user@example.com --nodes node1,node2
+
+# Provisioning with profile override
+esp-rainmaker-cli provision --profile china --prov_mode softap
+```
+
+### Use Cases
+
+#### 1. Testing User Sharing Between Profiles
+```bash
+# User A shares nodes from their profile
+esp-rainmaker-cli sharing add_user --profile user_a \
+  --user userb@example.com --nodes node1,node2
+
+# User B accepts and lists nodes from their profile
+esp-rainmaker-cli sharing list --profile user_b
+esp-rainmaker-cli getnodes --profile user_b
+```
+
+#### 2. Multi-Environment Operations
+```bash
+# Check nodes in development
+esp-rainmaker-cli getnodes --profile dev
+
+# Deploy same configuration to production
+esp-rainmaker-cli setparams <node_id> --profile prod \
+  --data '{"Switch": {"Power": true}}'
+
+# Without changing your current active profile
+esp-rainmaker-cli profile current
+# Current profile: global (unchanged)
+```
+
+#### 3. Cross-Region Operations
+```bash
+# Active profile: global
+# Quickly check nodes in China region
+esp-rainmaker-cli getnodes --profile china
+
+# Continue working with global profile
+esp-rainmaker-cli getparams <node_id>  # Uses global profile
+```
+
+### Requirements
+
+- The specified profile must exist (use `esp-rainmaker-cli profile list` to see available profiles)
+- You must be logged in to the specified profile
+- Works with both built-in profiles (`global`, `china`) and custom profiles
+
+### Error Handling
+
+```bash
+# Profile doesn't exist
+esp-rainmaker-cli getnodes --profile nonexistent
+# Error: Profile 'nonexistent' does not exist.
+
+# Not logged in to specified profile
+esp-rainmaker-cli getnodes --profile china
+# Error: Not logged in to profile 'china'. Please login first.
+```
+
+### Profile Override vs Profile Switch
+
+| Operation | Current Profile Changes | Use Case |
+|-----------|-------------------------|-----------|
+| `--profile <name>` | ❌ No | One-off operations, testing, cross-profile workflows |
+| `profile switch <name>` | ✅ Yes | Extended work session with different profile |
+
+```bash
+# Profile override (recommended for temporary operations)
+esp-rainmaker-cli getnodes --profile china        # Current profile unchanged
+esp-rainmaker-cli getparams <node_id> --profile china  # Current profile unchanged
+
+# Profile switch (recommended for extended work sessions)
+esp-rainmaker-cli profile switch china            # Current profile changed
+esp-rainmaker-cli getnodes                        # Uses china profile
+esp-rainmaker-cli getparams <node_id>            # Uses china profile
+```
+
 ## Login Requirements
 
 ### Built-in Profiles (Global/China)
