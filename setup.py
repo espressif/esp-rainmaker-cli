@@ -1,9 +1,16 @@
-#-!/usr/bin/env python3
+#!/usr/bin/env python3
 # SPDX-FileCopyrightText: 2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 
 import os
 import sys
+import re
+
+# Read version from version.py
+with open(os.path.join('rainmaker', 'version.py'), 'r') as f:
+    version_file = f.read()
+    version_match = re.search(r'VERSION = "(.*?)"', version_file)
+    VERSION = version_match.group(1)
 
 def get_install_requires():
     with open(os.path.realpath('requirements.txt')) as f:
@@ -19,8 +26,6 @@ except ImportError:
         "documentation for instructions on how to install it."
     )
     exit(1)
-
-VERSION = "1.1.4"
 
 long_description = """
 =================

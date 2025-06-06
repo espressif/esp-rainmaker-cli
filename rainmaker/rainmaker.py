@@ -24,15 +24,34 @@ from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
 
+# Import the version
+from rainmaker.version import VERSION
+
+def display_version(vars=None):
+    """
+    Display the current version of ESP RainMaker CLI.
+
+    :param vars: No parameters passed, defaults to `None`
+    :type vars: dict | None
+
+    :return: None
+    :rtype: None
+    """
+    print(f"ESP RainMaker CLI v{VERSION}")
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(func=None)
     subparsers = parser.add_subparsers(help='Functions')
-    
+
+    # Version command
+    version_parser = subparsers.add_parser("version",
+                                          help="Display ESP RainMaker CLI version")
+    version_parser.set_defaults(func=display_version)
+
     configure_parser = subparsers.add_parser("configure",
                                              help="Configure ESP RainMaker")
-    
+
     configure_parser.add_argument('--region',
                                   type=str,
                                   metavar='<region>',
@@ -81,6 +100,62 @@ def main():
                                             help='List all nodes associated'
                                                   ' with the user')
     getnodes_parser.set_defaults(func=get_nodes)
+
+    getnodedetails_parser = subparsers.add_parser('getnodedetails',
+                                               help='Get detailed information for all nodes'
+                                                    ' including config, status, and params')
+    getnodedetails_parser.add_argument('nodeid',
+                                    type=str,
+                                    metavar='<nodeid>',
+                                    nargs='?',  # Make it optional
+                                    help='Node ID for the node (if not provided, details for all nodes will be fetched)')
+    getnodedetails_parser.add_argument('--raw',
+                                    action='store_true',
+                                    help='Print raw JSON output')
+    getnodedetails_parser.set_defaults(func=get_node_details)
+
+    getschedules_parser = subparsers.add_parser('getschedules',
+                                               help='Get schedule information for a specific node')
+    getschedules_parser.add_argument('nodeid',
+                                      type=str,
+                                      metavar='<nodeid>',
+                                      help='Node ID for the node')
+    getschedules_parser.set_defaults(func=get_schedules)
+
+    setschedule_parser = subparsers.add_parser('setschedule',
+                                             help='Manage schedules for a specific node',
+                                             description='Manage schedules for a specific node.\nSee docs/schedule_examples.md for detailed examples of trigger and action configurations.',
+                                             epilog='Example to add a schedule that turns on a light at 6:30 PM on weekdays:\n'
+                                                   'esp-rainmaker-cli setschedule <nodeid> --operation add --name "Evening Light" \\\n'
+                                                   '  --trigger \'{"m": 1110, "d": 31}\' --action \'{"Light": {"Power": true}}\'')
+    setschedule_parser.add_argument('nodeid',
+                                  type=str,
+                                  metavar='<nodeid>',
+                                  help='Node ID for the node')
+    setschedule_parser.add_argument('--operation',
+                                  type=str,
+                                  required=True,
+                                  choices=['add', 'edit', 'remove', 'enable', 'disable'],
+                                  help='Operation to perform on the schedule')
+    setschedule_parser.add_argument('--id',
+                                  type=str,
+                                  help='Schedule ID (required for edit, remove, enable, disable operations, not needed for add as IDs are auto-generated)')
+    setschedule_parser.add_argument('--name',
+                                  type=str,
+                                  help='Schedule name (required for add operation, optional for edit)')
+    setschedule_parser.add_argument('--trigger',
+                                  type=str,
+                                  help='JSON string defining the trigger configuration (required for add, optional for edit)')
+    setschedule_parser.add_argument('--action',
+                                  type=str,
+                                  help='JSON string defining the action configuration (required for add, optional for edit)')
+    setschedule_parser.add_argument('--info',
+                                  type=str,
+                                  help='Additional information for the schedule (optional)')
+    setschedule_parser.add_argument('--flags',
+                                  type=str,
+                                  help='General purpose flags for the schedule (optional)')
+    setschedule_parser.set_defaults(func=set_schedule)
 
     # Node Config
     getnodeconfig_parser = subparsers.add_parser('getnodeconfig',

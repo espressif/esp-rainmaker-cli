@@ -51,13 +51,139 @@ class Session:
         """
         log.info("Getting nodes associated with the user.")
         path = 'user/nodes'
-        getnodes_url = self.config.get_host() + path
+        
+        node_map = {}
+        start_id = None
+        has_more = True
+        
+        while has_more:
+            query_parameters = ''
+            if start_id:
+                query_parameters = f'start_id={start_id}'
+                getnodes_url = f"{self.config.get_host()}{path}?{query_parameters}"
+            else:
+                getnodes_url = self.config.get_host() + path
+                
+            try:
+                log.debug("Get nodes request url : " + getnodes_url)
+                response = requests.get(url=getnodes_url,
+                                        headers=self.request_header,
+                                        verify=configmanager.CERT_FILE)
+                log.debug("Get nodes request response : " + response.text)
+                response.raise_for_status()
+
+            except requests.exceptions.HTTPError as http_err:
+                log.debug(http_err)
+                raise HttpErrorResponse(response.json())
+            except requests.exceptions.SSLError:
+                raise SSLError
+            except requests.exceptions.ConnectionError:
+                raise NetworkError
+            except Exception:
+                raise Exception(response.text)
+
+            response_data = json.loads(response.text)
+            for nodeid in response_data['nodes']:
+                node_map[nodeid] = node.Node(nodeid, self)
+                
+            # Check if there are more nodes to fetch
+            if 'next_id' in response_data and response_data['next_id']:
+                start_id = response_data['next_id']
+            else:
+                has_more = False
+                
+        log.info(f"Received all {len(node_map)} nodes for user successfully.")
+        return node_map
+
+    def get_node_details(self):
+        """
+        Get detailed information for all nodes including config, status, and params.
+
+        :raises NetworkError: If there is a network connection issue
+                              while getting node details
+        :raises Exception: If there is an HTTP issue while getting node details
+
+        :return: Detailed information for all nodes on Success
+        :rtype: dict
+        """
+        log.info("Getting detailed information for all nodes.")
+        path = 'user/nodes'
+        
+        all_nodes = []
+        start_id = None
+        has_more = True
+        
+        while has_more:
+            query_parameters = 'node_details=true'
+            if start_id:
+                query_parameters += f'&start_id={start_id}'
+            
+            getnodedetails_url = self.config.get_host() + path + '?' + query_parameters
+
+            try:
+                log.debug("Get node details request url : " + getnodedetails_url)
+                response = requests.get(url=getnodedetails_url,
+                                        headers=self.request_header,
+                                        verify=configmanager.CERT_FILE)
+                log.debug("Get node details response : " + response.text)
+                response.raise_for_status()
+
+            except requests.exceptions.HTTPError as http_err:
+                log.debug(http_err)
+                raise HttpErrorResponse(response.json())
+            except requests.exceptions.SSLError:
+                raise SSLError
+            except requests.exceptions.ConnectionError:
+                raise NetworkError
+            except Exception:
+                raise Exception(response.text)
+
+            response_data = json.loads(response.text)
+            
+            # Add nodes from current page to result
+            if 'node_details' in response_data:
+                all_nodes.extend(response_data['node_details'])
+            
+            # Check if there are more nodes to fetch
+            if 'next_id' in response_data and response_data['next_id']:
+                start_id = response_data['next_id']
+            else:
+                has_more = False
+        
+        # Construct the final response with all nodes
+        node_details = {
+            'node_details': all_nodes,
+            'total': len(all_nodes)
+        }
+        
+        log.info(f"Received detailed information for all {len(all_nodes)} nodes successfully.")
+        return node_details
+
+    def get_node_details_by_id(self, node_id):
+        """
+        Get detailed information for a specific node including config, status, and params.
+
+        :param node_id: ID of the node to fetch details for
+        :type node_id: str
+        
+        :raises NetworkError: If there is a network connection issue
+                              while getting node details
+        :raises Exception: If there is an HTTP issue while getting node details
+
+        :return: Detailed information for the specified node on Success
+        :rtype: dict
+        """
+        log.info(f"Getting detailed information for node {node_id}.")
+        path = 'user/nodes'
+        query_parameters = f'node_details=true&node_id={node_id}'
+        getnodedetails_url = self.config.get_host() + path + '?' + query_parameters
+
         try:
-            log.debug("Get nodes request url : " + getnodes_url)
-            response = requests.get(url=getnodes_url,
+            log.debug("Get node details request url : " + getnodedetails_url)
+            response = requests.get(url=getnodedetails_url,
                                     headers=self.request_header,
                                     verify=configmanager.CERT_FILE)
-            log.debug("Get nodes request response : " + response.text)
+            log.debug("Get node details response : " + response.text)
             response.raise_for_status()
 
         except requests.exceptions.HTTPError as http_err:
@@ -70,11 +196,9 @@ class Session:
         except Exception:
             raise Exception(response.text)
 
-        node_map = {}
-        for nodeid in json.loads(response.text)['nodes']:
-            node_map[nodeid] = node.Node(nodeid, self)
-        log.info("Received nodes for user successfully.")
-        return node_map
+        node_details = json.loads(response.text)
+        log.info(f"Received detailed information for node {node_id} successfully.")
+        return node_details
 
     def get_mqtt_host(self):
         """
