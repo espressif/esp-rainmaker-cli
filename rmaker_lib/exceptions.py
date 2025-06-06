@@ -85,13 +85,22 @@ class HttpErrorResponse(Exception):
 
     def __str__(self):
         try:
+            # Standard ESP RainMaker error response format
             return '{:<7} ({}):  {}'.format(
                 self.err_resp['status'].capitalize(),
                 self.err_resp['error_code'],
                 self.err_resp['description']
             )
         except KeyError:
-            return '{:<7}: {}'.format(
-                self.err_resp['status'].capitalize(),
-                self.err_resp['description']
-            )
+            try:
+                # Alternative format with status and description
+                return '{:<7}: {}'.format(
+                    self.err_resp['status'].capitalize(),
+                    self.err_resp['description']
+                )
+            except KeyError:
+                # Simple message format (e.g., {"message": "Unauthorized"})
+                if 'message' in self.err_resp:
+                    return 'Error: {}'.format(self.err_resp['message'])
+                # Fallback to raw response
+                return 'HTTP Error: {}'.format(str(self.err_resp))

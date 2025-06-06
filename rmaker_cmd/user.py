@@ -43,8 +43,11 @@ def signup(vars=None):
     """
     
     config = configmanager.Config()
-    print('Current selected region is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `configure` command with region flag.'.format(config.get_region()))
+    current_profile = config.get_current_profile_name()
+    
+    print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
     time.sleep(3)
+    
     log.info('Signing up the user ' + vars['user_name'])
     u = user.User(vars['user_name'])
     password = get_password()
@@ -82,8 +85,24 @@ def login(vars=None):
     """
     log.info('Signing in the user. Username  ' + str(vars['user_name']))
     config = configmanager.Config()
-    print('Current selected region is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `configure` command with region flag.'.format(config.get_region()))
+    current_profile = config.get_current_profile_name()
+    
+    print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
     time.sleep(3)
+
+    # Check if this is a custom profile
+    try:
+        profile_config = config.profile_manager.get_profile_config(current_profile)
+        is_custom_profile = not profile_config.get('builtin', False)
+        
+        if is_custom_profile and not profile_config.get('ui_login_supported', False):
+            # Custom profiles require --user_name and don't support UI login
+            if not vars.get('user_name') and not vars.get('email'):
+                log.error('Custom profiles require --user_name for login. UI-based login is not supported for custom profiles.')
+                print('Please use: rainmaker login --user_name <your_email>')
+                return
+    except Exception as e:
+        log.debug(f"Failed to get profile config: {e}")
 
     # Set email-id
     user_name = vars['user_name']
@@ -107,22 +126,37 @@ def login(vars=None):
             return
 
         # Remove current login creds
-        ret_val = config.remove_curr_login_creds(curr_creds_file=resp_filename)
+        ret_val = config.remove_curr_login_creds()
         if ret_val is None:
             print("Failed to end previous login session. Exiting.")
             return
     else:
-        log.debug("Current login creds not found at path: {}".format(resp_filename))
+        log.debug("Current login creds not found")
 
+    # For custom profiles, force user_name login
     if user_name is None:
+        try:
+            profile_config = config.profile_manager.get_profile_config(current_profile)
+            is_custom_profile = not profile_config.get('builtin', False)
+            
+            if is_custom_profile:
+                log.error('Custom profiles require --user_name for login. UI-based login is not supported for custom profiles.')
+                print('Please use: rainmaker login --user_name <your_email>')
+                return
+        except:
+            pass
+        
         browser_login()
         return
+        
     try:
         u = user.User(user_name)
         u.login(password=vars.get('password'))
         print('Login Successful')
     except Exception as login_err:
         log.error(login_err)
+        
+    return
 
 
 def logout(vars=None):
@@ -295,7 +329,9 @@ def get_user_details(vars=None):
     Get details of current logged-in user
     """
     config = configmanager.Config()
-    print('Current selected region is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `configure` command with region flag.'.format(config.get_region()))
+    current_profile = config.get_current_profile_name()
+    
+    print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
     
     try:
         # Get user details
@@ -316,42 +352,254 @@ def get_user_details(vars=None):
 
 def set_configuration(vars=None):
     """
-    Set Configuration
+    Set Configuration - now only handles legacy region setting
     
-    :param vars: `region` as key - Region of the user, defaults to `None`
-    :type vars: str | None
+    :param vars: Configuration parameters
+    :type vars: dict
     
     :return: None on Success
     """
-    if vars['region'] == 'china':
-        set_china_region(vars)
-    elif vars['region'] == 'global':
-        set_global_region(vars)
+    if vars.get('region'):
+        # Legacy region setting
+        if vars['region'] == 'china':
+            set_china_region(vars)
+        elif vars['region'] == 'global':
+            set_global_region(vars)
+        else:
+            log.error('Invalid Region. Valid regions: china, global. Exiting.')
+            sys.exit(1)
+    elif vars.get('profile'):
+        # Profile switching
+        switch_profile(vars)
+    elif vars.get('add_profile'):
+        # Add custom profile
+        add_custom_profile(vars)
+    elif vars.get('remove_profile'):
+        # Remove custom profile
+        remove_custom_profile(vars)
+    elif vars.get('list_profiles'):
+        # List all profiles
+        list_profiles(vars)
+    elif vars.get('show_current'):
+        # Show current profile
+        show_current_profile(vars)
     else:
-        log.error('Invalid Region. Valid regions: china, global. Exiting.')
+        log.error('No configuration option specified. Use --help for available options.')
         sys.exit(1)
     return
 
 def set_china_region(vars=None):
     """
-    Set China Region
+    Set China Region - maps to china profile
     """
     config = configmanager.Config()
-    config.set_config({
-        'login_url': serverconfig.LOGIN_URL_CN,
-        'host': serverconfig.HOST_CN,
-        'client_id': serverconfig.CLIENT_ID_CN,
-        'token_url': serverconfig.TOKEN_URL_CN,
-        'redirect_url': serverconfig.REDIRECT_URL_CN,
-        'external_url': serverconfig.EXTERNAL_LOGIN_URL_CN,
-        'claim_base_url': serverconfig.CLAIMING_BASE_URL_CN,
-    })
+    
+    try:
+        # Switch to china profile
+        config.switch_profile('china')
+        print("Switched to profile 'china' (region: china)")
+    except Exception as e:
+        log.error(f"Failed to switch to china region: {e}")
+        sys.exit(1)
     return
 
 def set_global_region(vars=None):
     """
-    Set Global Region
+    Set Global Region - maps to global profile
     """
     config = configmanager.Config()
-    config.unset_config({'login_url', 'host', 'client_id', 'token_url', 'redirect_url', 'external_url', 'claim_base_url'})
+    
+    try:
+        # Switch to global profile
+        config.switch_profile('global')
+        print("Switched to profile 'global' (region: global)")
+    except Exception as e:
+        log.error(f"Failed to switch to global region: {e}")
+        sys.exit(1)
+    return
+
+def switch_profile(vars=None):
+    """
+    Switch to a different profile
+    """
+    profile_name = vars['profile']
+    config = configmanager.Config()
+    
+    try:
+        if not config.profile_manager.profile_exists(profile_name):
+            print(f"Profile '{profile_name}' does not exist.")
+            print("Use 'profile list' to see available profiles.")
+            return
+        
+        config.switch_profile(profile_name)
+        print(f"Switched to profile '{profile_name}'")
+        
+    except Exception as e:
+        log.error(f"Failed to switch profile: {e}")
+
+def add_custom_profile(vars=None):
+    """
+    Add a new custom profile
+    """
+    profile_name = vars['add_profile']
+    base_url = vars.get('base_url')
+    description = vars.get('description')
+    
+    if not base_url:
+        log.error('Base URL is required for custom profiles. Use --base-url option.')
+        sys.exit(1)
+    
+    config = configmanager.Config()
+    
+    try:
+        config.profile_manager.create_custom_profile(profile_name, base_url, description)
+        print(f"Created custom profile '{profile_name}' with base URL '{base_url}'")
+        print(f"Note: Custom profiles require --user_name for login (UI login not supported)")
+        
+    except ValueError as e:
+        log.error(f"Failed to create profile: {e}")
+        sys.exit(1)
+    except Exception as e:
+        log.error(f"Failed to create profile: {e}")
+        sys.exit(1)
+
+def remove_custom_profile(vars=None):
+    """
+    Remove a custom profile
+    """
+    profile_name = vars['remove_profile']
+    config = configmanager.Config()
+    
+    try:
+        # Confirm before deletion
+        confirmation = input(f"Are you sure you want to delete profile '{profile_name}'? (y/N): ")
+        if confirmation.lower() not in ['y', 'yes']:
+            print("Profile deletion cancelled.")
+            return
+        
+        config.profile_manager.delete_custom_profile(profile_name)
+        print(f"Deleted custom profile '{profile_name}'")
+        
+    except ValueError as e:
+        log.error(f"Failed to delete profile: {e}")
+    except Exception as e:
+        log.error(f"Failed to delete profile: {e}")
+
+def list_profiles(vars=None):
+    """
+    List all available profiles
+    """
+    config = configmanager.Config()
+    current_profile = config.get_current_profile_name()
+    
+    try:
+        profiles = config.profile_manager.list_profiles()
+        
+        print("Available profiles:")
+        print("-" * 50)
+        
+        for profile_name, profile_config in profiles.items():
+            is_current = " (current)" if profile_name == current_profile else ""
+            profile_type = "builtin" if profile_config.get('builtin', False) else "custom"
+            
+            print(f"  {profile_name}{is_current}")
+            print(f"    Type: {profile_type}")
+            print(f"    Description: {profile_config.get('description', 'N/A')}")
+            
+            if profile_config.get('host'):
+                print(f"    Host: {profile_config['host']}")
+            
+            # Check if user is logged in to this profile
+            if config.profile_manager.has_profile_tokens(profile_name):
+                print(f"    Status: Logged in")
+            else:
+                print(f"    Status: Not logged in")
+            
+            print()
+        
+    except Exception as e:
+        log.error(f"Failed to list profiles: {e}")
+
+def show_current_profile(vars=None):
+    """
+    Show current profile information
+    """
+    config = configmanager.Config()
+    current_profile = config.get_current_profile_name()
+    
+    try:
+        profile_config = config.profile_manager.get_profile_config(current_profile)
+        is_builtin = profile_config.get('builtin', False)
+        
+        print(f"Current profile: {current_profile}")
+        print(f"Type: {'builtin' if is_builtin else 'custom'}")
+        print(f"Description: {profile_config.get('description', 'N/A')}")
+        print(f"Host: {config.get_host()}")
+        
+        # Check login status
+        if config.profile_manager.has_profile_tokens(current_profile):
+            try:
+                user_name = config.get_user_name()
+                print(f"Login status: Logged in as {user_name}")
+            except:
+                print(f"Login status: Logged in")
+        else:
+            print(f"Login status: Not logged in")
+        
+    except Exception as e:
+        log.error(f"Failed to get profile information: {e}")
+
+# New clean profile command functions
+
+def profile_list(vars=None):
+    """List all available profiles"""
+    return list_profiles(vars)
+
+def profile_current(vars=None):
+    """Show current profile information"""
+    return show_current_profile(vars)
+
+def profile_switch(vars=None):
+    """Switch to a different profile"""
+    # Convert new argument structure to old format
+    if 'profile_name' in vars:
+        vars['profile'] = vars['profile_name']
+    return switch_profile(vars)
+
+def profile_add(vars=None):
+    """Add a new custom profile"""
+    # Convert new argument structure to old format
+    if 'profile_name' in vars:
+        vars['add_profile'] = vars['profile_name']
+    return add_custom_profile(vars)
+
+def profile_remove(vars=None):
+    """Remove a custom profile"""
+    # Convert new argument structure to old format
+    if 'profile_name' in vars:
+        vars['remove_profile'] = vars['profile_name']
+    return remove_custom_profile(vars)
+
+# Region configuration function
+def set_region_configuration(vars=None):
+    """
+    Set Region Configuration
+    
+    :param vars: Configuration parameters
+    :type vars: dict
+    
+    :return: None on Success
+    """
+    if vars.get('region'):
+        # Region setting
+        if vars['region'] == 'china':
+            set_china_region(vars)
+        elif vars['region'] == 'global':
+            set_global_region(vars)
+        else:
+            log.error('Invalid Region. Valid regions: china, global. Exiting.')
+            sys.exit(1)
+    else:
+        log.error('No region specified. Valid regions: china, global.')
+        sys.exit(1)
     return

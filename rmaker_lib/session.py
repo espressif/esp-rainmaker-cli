@@ -32,9 +32,69 @@ class Session:
         """
         self.config = configmanager.Config()
         log.info("Initialising session for user")
+        
+        # Check if user is logged in to current profile
+        current_profile = self.config.get_current_profile_name()
+        if not self.config.profile_manager.has_profile_tokens(current_profile):
+            profile_config = self.config.profile_manager.get_profile_config(current_profile)
+            profile_type = "builtin" if profile_config.get('builtin', False) else "custom"
+            is_builtin = profile_config.get('builtin', False)
+            
+            print(f"\n❌ Not logged in to profile '{current_profile}'")
+            print(f"Please login to this {profile_type} profile first:")
+            
+            if profile_type == "custom":
+                print(f"   esp-rainmaker-cli login --user_name <your_email>")
+            else:
+                print(f"   esp-rainmaker-cli login")
+                print(f"   # or with credentials:")
+                print(f"   esp-rainmaker-cli login --user_name <your_email>")
+            print()
+            raise InvalidConfigError("Not logged in to current profile")
+        
         self.id_token = self.config.get_access_token()
         if self.id_token is None:
-            raise InvalidConfigError
+            print(f"\n❌ No valid tokens found for profile '{current_profile}'")
+            print(f"Please login to this profile:")
+            print(f"   esp-rainmaker-cli login")
+            print()
+            raise InvalidConfigError("No valid access token found")
+        
+        # Check if tokens might be for wrong region by looking at token issuer
+        try:
+            import base64
+            import json as json_lib
+            # Decode JWT token to check issuer (without verification for quick check)
+            token_parts = self.id_token.split('.')
+            if len(token_parts) >= 2:
+                # Add padding if needed for base64 decoding
+                payload = token_parts[1]
+                padding = 4 - (len(payload) % 4)
+                if padding != 4:
+                    payload += '=' * padding
+                
+                decoded_payload = base64.b64decode(payload)
+                token_data = json_lib.loads(decoded_payload)
+                token_issuer = token_data.get('iss', '')
+                
+                # Check if token issuer matches current profile region
+                current_region = self.config.get_region()
+                if current_region == 'china' and 'cognito-idp.us-east-1' in token_issuer:
+                    print(f"\n❌ You have global region tokens in china profile")
+                    print(f"Please login to china profile to get correct tokens:")
+                    print(f"   esp-rainmaker-cli login")
+                    print()
+                    raise InvalidConfigError("Wrong region tokens")
+                elif current_region == 'global' and 'cognito-idp.us-east-1' not in token_issuer and current_region != 'custom':
+                    print(f"\n❌ You have china region tokens in global profile")
+                    print(f"Please login to global profile to get correct tokens:")
+                    print(f"   esp-rainmaker-cli login")
+                    print()
+                    raise InvalidConfigError("Wrong region tokens")
+        except Exception:
+            # If token inspection fails, continue - let the API call fail with proper error
+            pass
+        
         self.request_header = {'Content-Type': 'application/json',
                                'Authorization': self.id_token}
 

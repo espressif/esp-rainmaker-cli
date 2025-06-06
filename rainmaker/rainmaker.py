@@ -18,7 +18,8 @@ import sys
 import argparse
 from rmaker_cmd.node import *
 from rmaker_cmd.user import signup, login, forgot_password,\
-                            get_user_details, logout, set_configuration
+                            get_user_details, logout, set_region_configuration, \
+                            profile_list, profile_current, profile_switch, profile_add, profile_remove
 from rmaker_cmd.cmd_response import get_cmd_requests, create_cmd_request
 from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
@@ -49,14 +50,63 @@ def main():
                                           help="Display ESP RainMaker CLI version")
     version_parser.set_defaults(func=display_version)
 
+    # Configure ESP RainMaker settings
     configure_parser = subparsers.add_parser("configure",
                                              help="Configure ESP RainMaker")
 
+    # Region configuration
     configure_parser.add_argument('--region',
                                   type=str,
                                   metavar='<region>',
                                   help='Region for ESP RainMaker, Valid Values: china, global. Default: global')
-    configure_parser.set_defaults(func=set_configuration)
+    
+    configure_parser.set_defaults(func=set_region_configuration)
+
+    # New dedicated profile command with subcommands
+    profile_parser = subparsers.add_parser("profile",
+                                          help="Manage ESP RainMaker profiles")
+    profile_subparsers = profile_parser.add_subparsers(dest='profile_command', help='Profile operations')
+    
+    # profile list
+    profile_list_parser = profile_subparsers.add_parser('list', help='List all available profiles')
+    profile_list_parser.set_defaults(func=profile_list)
+    
+    # profile current  
+    profile_current_parser = profile_subparsers.add_parser('current', help='Show current profile information')
+    profile_current_parser.set_defaults(func=profile_current)
+    
+    # profile switch
+    profile_switch_parser = profile_subparsers.add_parser('switch', help='Switch to a different profile')
+    profile_switch_parser.add_argument('profile_name',
+                                       type=str,
+                                       metavar='<profile_name>',
+                                       help='Name of the profile to switch to')
+    profile_switch_parser.set_defaults(func=profile_switch)
+    
+    # profile add
+    profile_add_parser = profile_subparsers.add_parser('add', help='Add a new custom profile')
+    profile_add_parser.add_argument('profile_name',
+                                    type=str,
+                                    metavar='<profile_name>',
+                                    help='Name of the profile to create')
+    profile_add_parser.add_argument('--base-url',
+                                    type=str,
+                                    metavar='<base_url>',
+                                    required=True,
+                                    help='Base URL for the custom profile')
+    profile_add_parser.add_argument('--description',
+                                    type=str,
+                                    metavar='<description>',
+                                    help='Description for the custom profile (optional)')
+    profile_add_parser.set_defaults(func=profile_add)
+    
+    # profile remove
+    profile_remove_parser = profile_subparsers.add_parser('remove', help='Remove a custom profile')
+    profile_remove_parser.add_argument('profile_name',
+                                       type=str,
+                                       metavar='<profile_name>',
+                                       help='Name of the profile to remove')
+    profile_remove_parser.set_defaults(func=profile_remove)
 
     signup_parser = subparsers.add_parser("signup",
                                           help="Sign up for ESP RainMaker")
