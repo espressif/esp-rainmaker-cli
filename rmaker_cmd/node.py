@@ -18,6 +18,7 @@ from rmaker_lib import node
 from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidJSONError, SSLError,\
     RequestTimeoutError
 from rmaker_lib.profile_utils import get_session_with_profile
+from rmaker_lib.schedule_utils import format_schedule_params, extract_schedules_from_node_details
 
 try:
     from rmaker_lib import session, node, device, service,\
@@ -423,62 +424,35 @@ def get_schedules(vars=None):
         # Get node details for the specific node
         node_details = s.get_node_details_by_id(node_id)
 
-        if not node_details or 'node_details' not in node_details:
-            print(f'No details available for node {node_id}.')
+        # Use the shared utility function to extract schedule information
+        schedule_info = extract_schedules_from_node_details(node_details, node_id)
+
+        # Handle errors
+        if 'error' in schedule_info:
+            print(schedule_info['error'])
             return
 
-        # Find the node in the node_details array
-        node_info = None
-        for node in node_details['node_details']:
-            if node.get('id') == node_id:
-                node_info = node
-                break
-
-        if not node_info:
-            print(f'Node {node_id} not found or not associated with current user.')
+        # Check if schedules are supported
+        if not schedule_info['schedules_supported']:
+            if 'message' in schedule_info:
+                print(schedule_info['message'])
+            else:
+                print(f"Node {node_id} does not support schedules.")
             return
 
-        # Look for schedule service and parameters
-        schedules_found = False
+        # Print schedule support confirmation
+        print("Node supports schedules.")
 
-        # First check in config for schedule service
-        if 'config' in node_info:
-            config = node_info['config']
-
-            if 'services' in config:
-                for service in config['services']:
-                    if service.get('type') == 'esp.service.schedule':
-                        schedules_found = True
-                        print(f"Node supports schedules.")
-                        break
-
-        if not schedules_found:
-            print(f"Node {node_id} does not support schedules.")
-            return
-
-        # Check in params for actual schedule data
-        schedule_data_found = False
-        if 'params' in node_info:
-            params = node_info['params']
-
-            # Look through all devices and services for schedules
-            for entity_name, entity_params in params.items():
-                for param_name, param_value in entity_params.items():
-                    # Check if this is a schedules parameter
-                    if isinstance(param_value, list) and param_name == "Schedules":
-                        schedule_data_found = True
-
-                        if not param_value:
-                            print("No schedules configured for this node.")
-                            return
-
-                        # Print each schedule
-                        for idx, schedule in enumerate(param_value):
-                            print(f"\nSchedule {idx+1}:")
-                            print(_format_schedule(schedule))
-
-        if not schedule_data_found:
+        # Display schedules
+        schedules = schedule_info['schedules']
+        if not schedules:
             print("No schedules configured for this node.")
+            return
+
+        # Print each schedule using the existing formatter
+        for idx, schedule in enumerate(schedules):
+            print(f"\nSchedule {idx+1}:")
+            print(_format_schedule(schedule))
 
     except Exception as e:
         log.error(e)
@@ -516,142 +490,35 @@ def set_schedule(vars=None):
     node_id = vars['nodeid']
     operation = vars['operation'].lower()
 
-    # Validate operation
-    valid_operations = ['add', 'edit', 'remove', 'enable', 'disable']
-    if operation not in valid_operations:
-        print(f"Error: Invalid operation. Must be one of {', '.join(valid_operations)}.")
-        return
+    try:
+        # Use the shared utility function to format schedule parameters
+        # Only auto-generate ID if none was provided by user
+        auto_generate_id = vars.get('id') is None
+        
+        params = format_schedule_params(
+            operation=operation,
+            schedule_id=vars.get('id'),
+            name=vars.get('name'),
+            trigger=vars.get('trigger'),  # Will be parsed as JSON string
+            action=vars.get('action'),    # Will be parsed as JSON string
+            info=vars.get('info'),
+            flags=vars.get('flags'),
+            auto_generate_id=auto_generate_id
+        )
+        
+        # Extract generated ID for 'add' operations
+        generated_id = None
+        if operation == 'add' and 'Schedule' in params and 'Schedules' in params['Schedule']:
+            generated_id = params['Schedule']['Schedules'][0].get('id')
 
-    # For operations other than 'add', id is required
-    if operation != 'add' and ('id' not in vars or vars['id'] is None):
-        print("Error: Schedule ID is required for this operation.")
-        return
-
-    # For 'add' operation, name, trigger, and action are required
-    if operation == 'add':
-        if 'name' not in vars or vars['name'] is None:
-            print("Error: Schedule name is required for add operation.")
-            return
-        if 'trigger' not in vars or vars['trigger'] is None:
-            print("Error: Trigger configuration is required for add operation. Please provide it with --trigger option.")
+    except ValueError as e:
+        print(f"Error: {str(e)}")
+        # Add helpful examples for common errors
+        if "Trigger configuration is required" in str(e):
             print("Example: --trigger '{\"m\": 1110, \"d\": 31}' for 6:30 PM on weekdays")
-            return
-        if 'action' not in vars or vars['action'] is None:
-            print("Error: Action configuration is required for add operation. Please provide it with --action option.")
+        elif "Action configuration is required" in str(e):
             print("Example: --action '{\"Light\": {\"Power\": true}}' to turn on a light")
-            return
-
-    # Create the schedule data structure
-    schedule = {}
-
-    # Set operation first
-    schedule['operation'] = operation
-
-    # Set ID field
-    if operation != 'add' and 'id' in vars:
-        schedule['id'] = vars['id']
-
-    if operation == 'add':
-        # Always generate a random 4-character hexadecimal ID for new schedules
-        import random
-        generated_id = ''.join(random.choice('0123456789ABCDEF') for _ in range(4))
-        schedule['id'] = generated_id
-
-    # For simple operations like enable/disable/remove, we only need id and operation
-    if operation in ['enable', 'disable', 'remove']:
-        # Create the full params object
-        params = {
-            "Schedule": {
-                "Schedules": [schedule]
-            }
-        }
-
-        try:
-            # Set the parameters on the node using profile-aware session
-            curr_session = get_session_with_profile(vars)
-            n = node.Node(node_id, curr_session)
-            response = n.set_node_params(params)
-
-            # Determine if the operation was successful
-            success = False
-            if isinstance(response, dict) and response.get('status', '').lower() == 'success':
-                success = True
-            elif isinstance(response, bool) and response:
-                success = True
-
-            if success:
-                op_str = {
-                    'add': 'added',
-                    'edit': 'updated',
-                    'remove': 'removed',
-                    'enable': 'enabled',
-                    'disable': 'disabled'
-                }.get(operation, operation)
-
-                print(f"Schedule successfully {op_str}.")
-            else:
-                if isinstance(response, dict):
-                    print(f"Error setting schedule: {response.get('description', 'Unknown error')}")
-                else:
-                    print(f"Error setting schedule: Unexpected response format")
-
-        except Exception as e:
-            log.error(e)
-            print(f"Error setting schedule: {str(e)}")
-
         return
-
-    # For add and edit operations, set additional fields
-    if 'name' in vars:
-        schedule['name'] = vars['name']
-
-    # Set trigger if provided
-    if 'trigger' in vars and vars['trigger'] is not None:
-        try:
-            trigger_data = json.loads(vars['trigger'])
-
-            # If this is an add operation with rsec but no ts, add current timestamp
-            if operation == 'add' and 'rsec' in trigger_data and 'ts' not in trigger_data:
-                import time
-                trigger_data['ts'] = int(time.time())
-
-            schedule['triggers'] = [trigger_data]
-        except json.JSONDecodeError:
-            print("Error: Invalid JSON format for trigger configuration.")
-            return
-    elif operation == 'add':
-        # For add operation, trigger is required
-        print("Error: Trigger configuration is required for add operation. Please provide it with --trigger option.")
-        print("Example: --trigger '{\"m\": 1110, \"d\": 31}' for 6:30 PM on weekdays")
-        return
-
-    # Set action if provided
-    if 'action' in vars and vars['action'] is not None:
-        try:
-            action_data = json.loads(vars['action'])
-            schedule['action'] = action_data
-        except json.JSONDecodeError:
-            print("Error: Invalid JSON format for action configuration.")
-            return
-    elif operation == 'add':
-        # For add operation, action is required
-        print("Error: Action configuration is required for add operation. Please provide it with --action option.")
-        print("Example: --action '{\"Light\": {\"Power\": true}}' to turn on a light")
-        return
-
-    # Set additional fields if provided
-    if 'info' in vars:
-        schedule['info'] = vars['info']
-
-    if 'flags' in vars and vars['flags'] is not None and vars['flags'].isdigit():
-        schedule['flags'] = int(vars['flags'])
-
-    # Create the full params object
-    params = {
-        "Schedule": {
-            "Schedules": [schedule]
-        }
-    }
 
     try:
         # Set the parameters on the node using profile-aware session
@@ -675,7 +542,7 @@ def set_schedule(vars=None):
                 'disable': 'disabled'
             }.get(operation, operation)
 
-            if operation == 'add':
+            if operation == 'add' and generated_id:
                 print(f"Schedule successfully {op_str} with ID: {generated_id}")
             else:
                 print(f"Schedule successfully {op_str}.")
