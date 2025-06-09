@@ -460,10 +460,10 @@ def get_schedules(vars=None):
 
 def set_schedule(vars=None):
     """
-    Set schedule for a specific node. This function supports adding, editing, removing, enabling, and disabling schedules.
+    Set schedule for a specific node or multiple nodes. This function supports adding, editing, removing, enabling, and disabling schedules.
 
     :param vars: Parameters:
-                 `nodeid` as key - Node ID to set schedule for
+                 `nodeid` as key - Node ID to set schedule for (or comma-separated list of node IDs)
                  `operation` as key - Operation to perform (add, edit, remove, enable, disable)
                  `id` as key - Schedule ID (required for edit, remove, enable, disable)
                  `name` as key - Schedule name (required for add, optional for edit)
@@ -487,7 +487,8 @@ def set_schedule(vars=None):
         print("Error: Operation is required (add, edit, remove, enable, disable).")
         return
 
-    node_id = vars['nodeid']
+    # Parse node IDs (support both single and comma-separated)
+    node_ids = [node_id.strip() for node_id in vars['nodeid'].split(',')]
     operation = vars['operation'].lower()
 
     try:
@@ -521,36 +522,62 @@ def set_schedule(vars=None):
         return
 
     try:
-        # Set the parameters on the node using profile-aware session
+        # Set the parameters on the node(s) using profile-aware session
         curr_session = get_session_with_profile(vars)
-        n = node.Node(node_id, curr_session)
-        response = n.set_node_params(params)
+        
+        # Create batch format for all cases (single and multiple nodes)
+        node_params_list = []
+        for node_id in node_ids:
+            node_params_list.append({
+                "node_id": node_id,
+                "payload": params
+            })
+        
+        result = node.Node.set_node_params_multiple(node_params_list, curr_session)
 
-        # Determine if the operation was successful
-        success = False
-        if isinstance(response, dict) and response.get('status', '').lower() == 'success':
-            success = True
-        elif isinstance(response, bool) and response:
-            success = True
+        # Determine operation string for messages
+        op_str = {
+            'add': 'added',
+            'edit': 'updated',
+            'remove': 'removed',
+            'enable': 'enabled',
+            'disable': 'disabled'
+        }.get(operation, operation)
 
-        if success:
-            op_str = {
-                'add': 'added',
-                'edit': 'updated',
-                'remove': 'removed',
-                'enable': 'enabled',
-                'disable': 'disabled'
-            }.get(operation, operation)
-
-            if operation == 'add' and generated_id:
-                print(f"Schedule successfully {op_str} with ID: {generated_id}")
+        # Provide detailed feedback based on results
+        if len(node_ids) == 1:
+            if result.get("success", True):
+                if operation == 'add' and generated_id:
+                    print(f"Schedule successfully {op_str} with ID: {generated_id}")
+                else:
+                    print(f"Schedule successfully {op_str}.")
             else:
-                print(f"Schedule successfully {op_str}.")
+                failed = result.get("failed_nodes", [])
+                if failed:
+                    print(f"Failed to {operation} schedule: {failed[0].get('description', 'Unknown error')}")
+                else:
+                    print(f"Failed to {operation} schedule.")
         else:
-            if isinstance(response, dict):
-                print(f"Error setting schedule: {response.get('description', 'Unknown error')}")
+            successful_nodes = result.get("successful_nodes", [])
+            failed_nodes = result.get("failed_nodes", [])
+            total_nodes = len(node_ids)
+            
+            if result.get("success", True):
+                if operation == 'add' and generated_id:
+                    print(f"Schedule successfully {op_str} with ID: {generated_id} for all {total_nodes} nodes")
+                else:
+                    print(f"Schedule successfully {op_str} for all {total_nodes} nodes.")
             else:
-                print(f"Error setting schedule: Unexpected response format")
+                if operation == 'add' and generated_id:
+                    print(f"Schedule {op_str} with ID: {generated_id} for {len(successful_nodes)} of {total_nodes} nodes")
+                else:
+                    print(f"Schedule {op_str} for {len(successful_nodes)} of {total_nodes} nodes.")
+                if failed_nodes:
+                    print('Failed nodes:')
+                    for failed in failed_nodes:
+                        node_id = failed.get("node_id", "unknown")
+                        description = failed.get("description", "Unknown error")
+                        print(f'  - {node_id}: {description}')
 
     except Exception as e:
         log.error(e)
@@ -1034,9 +1061,9 @@ def get_node_status(vars=None):
 
 def set_params(vars=None):
     """
-    Set parameters of the node.
+    Set parameters of the node(s).
 
-    :param vars: `nodeid` as key - Node ID for the node
+    :param vars: `nodeid` as key - Node ID for the node (or comma-separated list of node IDs)
                  `data` as key - JSON data containing parameters to be set
                  `filepath` as key - Path of the JSON file containing parameters
                  `profile` as key - Profile to use for the operation
@@ -1058,10 +1085,22 @@ def set_params(vars=None):
         with open(vars['filepath'], 'r') as data_file:
             data = json.load(data_file)
 
+    # Parse node IDs (support both single and comma-separated)
+    node_ids = [node_id.strip() for node_id in vars['nodeid'].split(',')]
+
     try:
         s = get_session_with_profile(vars or {})
-        n = node.Node(vars['nodeid'], s)
-        status = n.set_node_params(data)
+        
+        # Create batch format for all cases (single and multiple nodes)
+        node_params_list = []
+        for node_id in node_ids:
+            node_params_list.append({
+                "node_id": node_id,
+                "payload": data
+            })
+        
+        result = node.Node.set_node_params_multiple(node_params_list, s)
+            
     except SSLError:
         log.error(SSLError())
     except NetworkError as conn_err:
@@ -1069,8 +1108,33 @@ def set_params(vars=None):
         log.warn(conn_err)
     except Exception as set_params_err:
         log.error(set_params_err)
+        print(f"Error setting parameters: {set_params_err}")
     else:
-        print('Node state updated successfully.')
+        # Provide detailed feedback based on results
+        if len(node_ids) == 1:
+            if result.get("success", True):
+                print('Node state updated successfully.')
+            else:
+                failed = result.get("failed_nodes", [])
+                if failed:
+                    print(f'Failed to update node: {failed[0].get("description", "Unknown error")}')
+                else:
+                    print('Failed to update node state.')
+        else:
+            successful_nodes = result.get("successful_nodes", [])
+            failed_nodes = result.get("failed_nodes", [])
+            total_nodes = len(node_ids)
+            
+            if result.get("success", True):
+                print(f'Parameters updated successfully for all {total_nodes} nodes.')
+            else:
+                print(f'Parameters updated for {len(successful_nodes)} of {total_nodes} nodes.')
+                if failed_nodes:
+                    print('Failed nodes:')
+                    for failed in failed_nodes:
+                        node_id = failed.get("node_id", "unknown")
+                        description = failed.get("description", "Unknown error")
+                        print(f'  - {node_id}: {description}')
     return
 
 
@@ -1214,3 +1278,4 @@ def ota_upgrade(vars=None):
     except Exception as e:
         log.error(e)
     return
+
