@@ -1,16 +1,6 @@
-# Copyright 2020 Espressif Systems (Shanghai) PTE LTD
+# SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 
 import webbrowser
 import socket
@@ -93,9 +83,12 @@ def get_free_port():
     return port
 
 
-def browser_login():
+def browser_login(config=None):
     """
     Opens browser with login url using Httpd Server.
+
+    :param config: Config object to use for login (defaults to current profile)
+    :type config: configmanager.Config
 
     :raises Exception: If there is an HTTP issue while
                        logging in through browser
@@ -122,7 +115,8 @@ def browser_login():
                   'Use --email option instead.')
         return
 
-    config = configmanager.Config()
+    if config is None:
+        config = configmanager.Config()
     url = config.get_login_url() + str(port) +\
         '&host_url=' + config.get_host() + 'login2' +\
         '&github_url=' + config.get_external_url() +\
@@ -147,7 +141,7 @@ def browser_login():
             if 'code' in server_instance.query_params:
                 log.debug('Login successful. Received authorization code.')
                 code = server_instance.query_params['code']
-                get_tokens(code)
+                get_tokens(code, config)
                 print('Login successful')
                 return
 
@@ -165,16 +159,21 @@ def browser_login():
                 config_data['accesstoken'] = server_instance.query_params[
                                                                 'access_token'
                                                                 ]
-                configmanager.Config().set_config(config_data)
+                config.set_config(config_data)
                 print('Login successful')
                 return
     except Exception as browser_login_err:
         log.error(browser_login_err)
 
 
-def get_tokens(code):
+def get_tokens(code, config=None):
     """
     Get access token and set the config file after successful browser login.
+
+    :param code: Authorization code from browser login
+    :type code: str
+    :param config: Config object to use (defaults to current profile)
+    :type config: configmanager.Config
 
     :raises Exception: If there is an HTTP issue in getting access token
     :raises SystemExit: If Exception is raised
@@ -183,7 +182,8 @@ def get_tokens(code):
     :rtype: None
     """
     log.info('Getting access tokens using authorization code.')
-    config = configmanager.Config()
+    if config is None:
+        config = configmanager.Config()
     client_id = config.get_client()
     request_data = 'grant_type=authorization_code&client_id=' + client_id +\
                    '&code=' + code + '&redirect_uri=' +\
@@ -216,5 +216,5 @@ def get_tokens(code):
         config_data['refreshtoken'] = result['refresh_token']
         config_data['accesstoken'] = result['access_token']
         log.debug('Received access tokens using authorization code.')
-        configmanager.Config().set_config(config_data)
+        config.set_config(config_data)
     return

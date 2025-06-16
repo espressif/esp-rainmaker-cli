@@ -1,16 +1,6 @@
-# Copyright 2020 Espressif Systems (Shanghai) PTE LTD
+# SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 
 import json
 import errno
@@ -30,73 +20,142 @@ from rmaker_lib.exceptions import NetworkError, \
     ExpiredSessionError, \
     SSLError, \
     RequestTimeoutError
-from rmaker_lib.envval import get_rm_user_config_dir
 from rmaker_lib.constants import RM_CONFIG_FILE
 
+# Import the new ProfileManager
+from rmaker_lib.profile_manager import ProfileManager
 
-RM_USER_CONFIG_DIR_VALUE = get_rm_user_config_dir()
+# Default config directory - same as ProfileManager for consistency
+DEFAULT_CONFIG_DIR = os.path.expanduser('~/.espressif/rainmaker')
 
-CONFIG_FILE = os.path.join(RM_USER_CONFIG_DIR_VALUE, RM_CONFIG_FILE)
 CURR_DIR = os.path.dirname(__file__)
 CERT_FILE = CURR_DIR + '/../server_cert/server_cert.pem'
 
 
 class Config:
     """
-    Config class used to instantiate instances of config to
-    perform various get/set configuration operations
+    Config class used to set/get configuration for ESP Rainmaker.
+    Now with profile-aware support for multi-profile management.
     """
 
-    def set_config(self, data: dict, config_file=CONFIG_FILE):
+    def __init__(self, config_dir=None, profile_override=None):
         """
-        Set the configuration file.
+        Initialize Config with ProfileManager integration.
+        
+        :param config_dir: Optional custom config directory. For testing purposes.
+        :param profile_override: Optional profile name to use instead of current profile.
+        """
+        self.profile_manager = ProfileManager(config_dir)
+        self.profile_override = profile_override
+        
+        if profile_override:
+            # Validate that the override profile exists
+            if not self.profile_manager.profile_exists(profile_override):
+                raise ValueError(f"Profile '{profile_override}' does not exist")
+            self.current_profile = profile_override
+        else:
+            self.current_profile = self.profile_manager.get_current_profile()
+        
+        # For backward compatibility, compute the legacy config file path
+        self.config_dir = self.profile_manager.config_dir
+        self.legacy_config_file = os.path.join(self.config_dir, RM_CONFIG_FILE)
 
-        :params data: Config Data to write to file
+    def get_current_profile_name(self):
+        """Get the name of the currently active profile."""
+        return self.current_profile
+
+    def switch_profile(self, profile_name):
+        """Switch to a different profile."""
+        if self.profile_override:
+            raise ValueError("Cannot switch profile when using profile override")
+        self.profile_manager.set_current_profile(profile_name)
+        self.current_profile = profile_name
+
+    def get_profile_config_for_current(self):
+        """Get the profile configuration for the current profile."""
+        return self.profile_manager.get_profile_config(self.current_profile)
+
+    def set_config(self, data: dict, config_file=None):
+        """
+        Set the configuration details to config file.
+        Now profile-aware - handles both profile config and token storage.
+
+        :params data: Config data to be stored to config file
         :type data: dict
 
-        :params config_file: Config filename to write config data to
-        :type data: str
+        :params config_file: Config filename to write config data to (for compatibility)
+        :type config_file: str
 
         :raises OSError: If there is an OS issue while creating new directory
                          for config file
-        :raises Exception: If there is a File Handling error while saving
+        :raises Exception: If there is a FILE Handling error while writing
                            config to file
 
         :return: None on Success and Failure
         :rtype: None
         """
-        log.info("Configuring config file.")
-        file_dir = Path(RM_USER_CONFIG_DIR_VALUE)
-        file = Path(config_file)
-        if not file.exists():
-            try:
-                if not file_dir.exists():
-                    log.debug('Config directory does not exist,'
-                              'creating new directory.')
-                    os.makedirs(file_dir)
-            except OSError as set_config_err:
-                log.error(set_config_err)
-                if set_config_err.errno != errno.EEXIST:
-                    raise set_config_err
-        try:
-            json_data = {}
+        # Use default config file if none specified
+        if config_file is None:
+            config_file = self.legacy_config_file
+            
+        # Extract token data if present
+        idtoken = data.get('idtoken')
+        refreshtoken = data.get('refreshtoken')
+        accesstoken = data.get('accesstoken')
+        
+        # Save tokens to current profile if they exist
+        if any([idtoken, refreshtoken, accesstoken]):
+            self.profile_manager.set_profile_tokens(
+                self.current_profile,
+                idtoken=idtoken,
+                refreshtoken=refreshtoken,
+                accesstoken=accesstoken
+            )
+        
+        # Handle profile configuration updates (for region switching)
+        profile_config_keys = {
+            'login_url', 'host', 'client_id', 'token_url', 
+            'redirect_url', 'external_url', 'claim_base_url'
+        }
+        
+        profile_config_data = {k: v for k, v in data.items() if k in profile_config_keys}
+        
+        if profile_config_data:
+            # For backward compatibility, still save to legacy config file
+            # This supports the existing region switching logic
+            file = Path(config_file)
+            if not file.exists():
+                try:
+                    os.makedirs(self.config_dir, exist_ok=True)
+                except OSError as set_config_err:
+                    if set_config_err.errno != errno.EEXIST:
+                        raise set_config_err
+            
+            existing_data = {}
             if file.exists():
-                with open(config_file, 'r') as pconfig_file:
-                    json_data = json.load(pconfig_file)
-            with open(config_file, 'w') as config_file:
-                for key, value in data.items():
-                    json_data[key] = value
-                json.dump(json_data, config_file)
-        except Exception as set_config_err:
-            raise set_config_err
-        log.info("Configured config file successfully.")
+                try:
+                    with open(config_file, 'r') as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    pass  # Start with empty if file is corrupted
+            
+            existing_data.update(profile_config_data)
+            
+            try:
+                with open(config_file, 'w') as f:
+                    json.dump(existing_data, f)
+            except Exception as set_config_err:
+                raise set_config_err
 
-    def unset_config(self, keys, curr_creds_file=CONFIG_FILE):
+    def unset_config(self, keys, curr_creds_file=None):
         """
         Unset the configuration file.
 
-        :params config_file: Config filename to delete config data from
-        :type data: str
+        :params keys: Keys to remove from config
+        :type keys: set or list
+
+        :params curr_creds_file: Config filename to delete config data from
+        :type curr_creds_file: str
 
         :raises Exception: If there is a File Handling error while deleting
                            config file
@@ -105,7 +164,7 @@ class Config:
         :rtype: None
         """
         if not curr_creds_file:
-            curr_creds_file = CONFIG_FILE
+            curr_creds_file = self.legacy_config_file
         try:
             # Read the JSON file
             with open(curr_creds_file, 'r') as file:
@@ -116,19 +175,19 @@ class Config:
                     del data[key]
             with open(curr_creds_file, 'w') as file:
                 json.dump(data, file)
-            log.info(
-                "...Success...")
+            log.info("...Success...")
             return True
         except Exception as e:
             log.debug("Removing keys from path {}. Failed: {}".format(
                 curr_creds_file, e))
         return None
 
-    def get_config(self, config_file=CONFIG_FILE):
+    def get_config(self, config_file=None):
         """
         Get the configuration details from config file.
+        Now profile-aware - gets tokens for the current profile.
 
-        :params config_file: Config filename to read config data from
+        :params config_file: Config filename to read config data from (kept for compatibility)
         :type data: str
 
         :raises Exception: If there is a File Handling error while reading
@@ -140,21 +199,42 @@ class Config:
             accesstoken - Access Token from config saved\n
         :rtype: str
         """
-        file = Path(config_file)
-
-        if not file.exists():
+        # Use default config file if none specified
+        if config_file is None:
+            config_file = self.legacy_config_file
+            
+        # Use profile-based token storage
+        idtoken, refresh_token, access_token = self.profile_manager.get_profile_tokens(self.current_profile)
+        
+        # If no profile tokens and we have legacy config, try migration
+        if access_token is None and config_file == self.legacy_config_file:
+            file = Path(config_file)
+            if file.exists():
+                try:
+                    with open(config_file, 'r') as config_file_handle:
+                        data = json.load(config_file_handle)
+                        legacy_idtoken = data.get('idtoken')
+                        legacy_refresh_token = data.get('refreshtoken')
+                        legacy_access_token = data.get('accesstoken')
+                        
+                        if legacy_access_token:
+                            # Migrate legacy tokens to current profile
+                            self.profile_manager.set_profile_tokens(
+                                self.current_profile,
+                                idtoken=legacy_idtoken,
+                                refreshtoken=legacy_refresh_token,
+                                accesstoken=legacy_access_token
+                            )
+                            return legacy_idtoken, legacy_refresh_token, legacy_access_token
+                except Exception as get_config_err:
+                    log.debug(f"Failed to read legacy config: {get_config_err}")
+        
+        if access_token is None:
             raise InvalidUserError
-        try:
-            with open(config_file, 'r') as config_file:
-                data = json.load(config_file)
-                idtoken = data.get('idtoken')
-                refresh_token = data.get('refreshtoken')
-                access_token = data.get('accesstoken')
-        except Exception as get_config_err:
-            raise get_config_err
+            
         return idtoken, refresh_token, access_token
 
-    def get_binary_config(self, config_file=CONFIG_FILE):
+    def get_binary_config(self, config_file=None):
         """
         Get the configuration details from binary config file.
 
@@ -167,6 +247,10 @@ class Config:
         :return: Config data read from file on Success, None on Failure
         :rtype: str | None
         """
+        # Use default config file if none specified
+        if config_file is None:
+            config_file = self.legacy_config_file
+        
         file = Path(config_file)
         if not file.exists():
             return None
@@ -181,6 +265,7 @@ class Config:
     def update_config(self, access_token, id_token):
         """
         Update the configuration file.
+        Now profile-aware - updates tokens for the current profile.
 
         :params access_token: Access Token to update in config file
         :type access_token: str
@@ -196,22 +281,12 @@ class Config:
         :return: None on Success and Failure
         :rtype: None
         """
-        file = Path(CONFIG_FILE)
-        if not file.exists():
-            try:
-                os.makedirs(RM_USER_CONFIG_DIR_VALUE)
-            except OSError as set_config_err:
-                if set_config_err.errno != errno.EEXIST:
-                    raise set_config_err
-        try:
-            with open(CONFIG_FILE, 'r') as config_file:
-                config_data = json.load(config_file)
-                config_data['accesstoken'] = access_token
-                config_data['idtoken'] = id_token
-            with open(CONFIG_FILE, 'w') as config_file:
-                json.dump(config_data, config_file)
-        except Exception as set_config_err:
-            raise set_config_err
+        # Use profile-based token storage
+        self.profile_manager.set_profile_tokens(
+            self.current_profile,
+            idtoken=id_token,
+            accesstoken=access_token
+        )
 
     def get_token_attribute(self, attribute_name, is_access_token=False):
         """
@@ -436,17 +511,9 @@ class Config:
 
     def check_user_creds_exists(self):
         '''
-        Check if user creds exist
+        Check if user creds exist - now profile-aware
         '''
-        curr_login_creds_file = CONFIG_FILE
-        file = Path(curr_login_creds_file)
-        if not file.exists():
-            return False
-        _,_,access_token = self.get_config()
-        if access_token is not None:
-            return curr_login_creds_file
-        else:
-            return False
+        return self.profile_manager.has_profile_tokens(self.current_profile)
 
     def get_input_to_end_session(self, email_id):
         '''
@@ -466,17 +533,16 @@ class Config:
 
     def remove_curr_login_creds(self, curr_creds_file=None):
         '''
-        Remove current login creds
+        Remove current login creds - now profile-aware
         '''
         log.info("Removing current login creds")
         try:
-            self.unset_config({'accesstoken', 'idtoken', 'refreshtoken'}, curr_creds_file)
-            log.info(
-                "Previous login session ended. Removing current login creds...Success...")
+            self.profile_manager.clear_profile_tokens(self.current_profile)
+            log.info("Previous login session ended. Removing current login creds...Success...")
             return True
         except Exception as e:
-            log.debug("Removing current login creds from path {}. Failed: {}".format(
-                curr_creds_file, e))
+            log.debug("Removing current login creds for profile {}. Failed: {}".format(
+                self.current_profile, e))
         return None
 
     def get_environment_config(self):
@@ -499,7 +565,7 @@ class Config:
             claim_base_url - Claim Base URL
         :rtype: str
         """
-        config_file=CONFIG_FILE
+        config_file=self.legacy_config_file
         file = Path(config_file)
 
         if not file.exists():
@@ -520,28 +586,41 @@ class Config:
     
     def is_china_region(self):
         """
-        Check if user is in china region
+        Check if user is in china region - now profile-aware
         """
         return self.get_host() == serverconfig.HOST_CN
     
     def get_region(self):
         """
-        Get the region
+        Get the region - now profile-aware
 
         :return: Region
         :rtype: str
         """
-        if self.is_china_region():
+        if self.current_profile == 'china':
             return 'china'
-        return 'global'
+        elif self.current_profile == 'global':
+            return 'global'
+        else:
+            # For custom profiles, just return the profile name
+            return self.current_profile
 
     def get_login_url(self):
         """
-        Get the login URL
+        Get the login URL - now profile-aware
 
         :return: Login URL
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'login_url' in profile_config:
+                return profile_config['login_url']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         login_url, _, _, _, _, _, _ = self.get_environment_config()
         if login_url is None:
             return serverconfig.LOGIN_URL
@@ -549,11 +628,20 @@ class Config:
     
     def get_host(self):
         """
-        Get the host URL
+        Get the host URL - now profile-aware
 
         :return: Host URL
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'host' in profile_config:
+                return profile_config['host']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         _, host, _, _, _, _, _ = self.get_environment_config()
         if host is None:
             return serverconfig.HOST
@@ -561,11 +649,20 @@ class Config:
 
     def get_client(self):
         """
-        Get the client ID
+        Get the client ID - now profile-aware
 
         :return: Client ID
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'client_id' in profile_config:
+                return profile_config['client_id']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         _, _, client, _, _, _, _ = self.get_environment_config()
         if client is None:
             return serverconfig.CLIENT_ID
@@ -573,11 +670,20 @@ class Config:
 
     def get_token_url(self):
         """
-        Get the token URL
+        Get the token URL - now profile-aware
 
         :return: Token URL
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'token_url' in profile_config:
+                return profile_config['token_url']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         _, _, _, token_url, _, _, _ = self.get_environment_config()
         if token_url is None:
             return serverconfig.TOKEN_URL
@@ -585,11 +691,20 @@ class Config:
     
     def get_redirect_url(self):
         """
-        Get the redirect URL
+        Get the redirect URL - now profile-aware
 
         :return: Redirect URL
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'redirect_url' in profile_config:
+                return profile_config['redirect_url']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         _, _, _, _, redirect_url, _, _ = self.get_environment_config()
         if redirect_url is None:
             return serverconfig.REDIRECT_URL
@@ -597,11 +712,20 @@ class Config:
     
     def get_external_url(self):
         """
-        Get the external URL
+        Get the external URL - now profile-aware
 
         :return: External URL
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'external_url' in profile_config:
+                return profile_config['external_url']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         _, _, _, _, _, external_url, _ = self.get_environment_config()
         if external_url is None:
             return serverconfig.EXTERNAL_LOGIN_URL
@@ -609,10 +733,19 @@ class Config:
     
     def get_claim_base_url(self):
         """
-        Get the claim base URL
+        Get the claim base URL - now profile-aware
 
         :return: Claim base URL
         :rtype: str
         """
+        # First try to get from current profile configuration
+        try:
+            profile_config = self.profile_manager.get_profile_config(self.current_profile)
+            if 'claim_base_url' in profile_config:
+                return profile_config['claim_base_url']
+        except Exception:
+            pass
+        
+        # Fall back to legacy environment config
         _, _, _, _, _, _, claim_base_url = self.get_environment_config()
         return claim_base_url

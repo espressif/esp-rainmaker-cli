@@ -1,16 +1,6 @@
-# Copyright 2020 Espressif Systems (Shanghai) PTE LTD
+# SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: Apache-2.0
 
 import json
 import re
@@ -22,6 +12,12 @@ import requests
 import base64
 import re
 from pathlib import Path
+from rmaker_lib import session, configmanager
+from rmaker_lib.logger import log
+from rmaker_lib import node
+from rmaker_lib.exceptions import HttpErrorResponse, NetworkError, InvalidJSONError, SSLError,\
+    RequestTimeoutError
+from rmaker_lib.profile_utils import get_session_with_profile
 
 try:
     from rmaker_lib import session, node, device, service,\
@@ -180,7 +176,7 @@ def get_nodes(vars=None):
     """
     List all nodes associated with the user.
 
-    :param vars: No Parameters passed, defaults to `None`
+    :param vars: Optional parameters including 'profile'
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting nodes
@@ -189,7 +185,7 @@ def get_nodes(vars=None):
     :rtype: None
     """
     try:
-        s = session.Session()
+        s = get_session_with_profile(vars or {})
         nodes = s.get_nodes()
     except Exception as get_nodes_err:
         log.error(get_nodes_err)
@@ -208,6 +204,7 @@ def get_node_details(vars=None):
     :param vars: Optional parameters:
                  `raw` as key - If True, prints raw JSON output
                  `nodeid` as key - Single node ID to get details for
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting node details
@@ -216,7 +213,7 @@ def get_node_details(vars=None):
     :rtype: None
     """
     try:
-        s = session.Session()
+        s = get_session_with_profile(vars or {})
         raw_output = vars.get('raw', False) if vars else False
         node_id = vars.get('nodeid') if vars else None
 
@@ -406,6 +403,7 @@ def get_schedules(vars=None):
 
     :param vars: Parameters:
                  `nodeid` as key - Node ID to fetch schedules for
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting node details
@@ -420,7 +418,7 @@ def get_schedules(vars=None):
     node_id = vars['nodeid']
 
     try:
-        s = session.Session()
+        s = get_session_with_profile(vars)
 
         # Get node details for the specific node
         node_details = s.get_node_details_by_id(node_id)
@@ -499,6 +497,7 @@ def set_schedule(vars=None):
                  `action` as key - JSON string of action configuration (required for add, optional for edit)
                  `info` as key - Additional information (optional)
                  `flags` as key - General purpose flags (optional)
+                 `profile` as key - Profile to use for this operation (optional)
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while setting schedule
@@ -568,8 +567,9 @@ def set_schedule(vars=None):
         }
 
         try:
-            # Set the parameters on the node
-            n = node.Node(node_id, session.Session())
+            # Set the parameters on the node using profile-aware session
+            curr_session = get_session_with_profile(vars)
+            n = node.Node(node_id, curr_session)
             response = n.set_node_params(params)
 
             # Determine if the operation was successful
@@ -654,8 +654,9 @@ def set_schedule(vars=None):
     }
 
     try:
-        # Set the parameters on the node
-        n = node.Node(node_id, session.Session())
+        # Set the parameters on the node using profile-aware session
+        curr_session = get_session_with_profile(vars)
+        n = node.Node(node_id, curr_session)
         response = n.set_node_params(params)
 
         # Determine if the operation was successful
@@ -712,39 +713,34 @@ def _set_node_ids_list(node_ids):
     log.debug("Node ids list: {}".format(node_id_list))
     return node_id_list
 
-def sharing_request_op(accept_request=False, request_id=None):
+def sharing_request_op(accept_request=False, request_id=None, profile_override=None):
     """
-    Accept or decline sharing request
+    Accept or Decline the sharing request.
 
-    :param vars: `accept_request` as key
-                  If true, accept sharing request
-                  If false, decline sharing request
-    :type vars: bool
+    :param accept_request: Request to accept or decline the request
+    :type accept_request: bool
 
-    :param vars: `request_id` as key - Id of sharing request
-    :type vars: str
+    :param request_id: Request ID for accept/decline
+    :type request_id: str
+    
+    :param profile_override: Optional profile to use for this operation
+    :type profile_override: str
 
     :raises Exception: If there is an issue
-                       accepting or declining request
+                       while accept/decline request
 
     :return: API response
     :rtype: dict
     """
-    log.debug("Accept sharing request")
-
-    print('\nPlease make sure current (logged-in) user is Secondary user\n')
-
-    if accept_request:
-        print("Accepting request")
-    else:
-        print("Declining request")
-
     # Create API data dictionary
     api_data = {}
     api_data['accept'] = accept_request
     api_data['request_id'] = request_id
 
-    node_obj = node.Node(None, session.Session())
+    # Use profile-aware session
+    vars_dict = {'profile': profile_override} if profile_override else {}
+    curr_session = get_session_with_profile(vars_dict)
+    node_obj = node.Node(None, curr_session)
     log.debug("API data set: {}".format(api_data))
 
     # API to accept or decline node sharing request
@@ -753,26 +749,29 @@ def sharing_request_op(accept_request=False, request_id=None):
 
     return node_json_resp
 
-def list_sharing_details(node_id=None, primary_user=False, request_id=None, list_requests=False):
+def list_sharing_details(node_id=None, primary_user=False, request_id=None, list_requests=False, profile_override=None):
     """
     List sharing details of all nodes associated with user
     or List pending requests
 
-    :param vars: `node_id` as key - Node Id of the node(s)
+    :param node_id: Node Id of the node(s)
                  (if not provided, is set to all nodes associated with user)
-    :type vars: str
+    :type node_id: str
 
-    :param vars: `primary_user` as key - User is primary or secondary
+    :param primary_user: User is primary or secondary
                  (if provided, user is primary user)
-    :type vars: bool
+    :type primary_user: bool
 
-    :param vars: `request_id` as key - Id of sharing request
-    :type vars: str
+    :param request_id: Id of sharing request
+    :type request_id: str
 
-    :param vars: `list_requests` as key -
+    :param list_requests:
                  If True, list pending requests
                  If False, list sharing details of nodes
-    :type vars: bool
+    :type list_requests: bool
+    
+    :param profile_override: Optional profile to use for this operation
+    :type profile_override: str
 
     :raises Exception: If there is an issue
                        while listing details
@@ -780,7 +779,10 @@ def list_sharing_details(node_id=None, primary_user=False, request_id=None, list
     :return: API response
     :rtype: dict
     """
-    node_obj = node.Node(node_id, session.Session())
+    # Use profile-aware session
+    vars_dict = {'profile': profile_override} if profile_override else {}
+    curr_session = get_session_with_profile(vars_dict)
+    node_obj = node.Node(node_id, curr_session)
     log.debug("Node id received from user: {}".format(node_id))
 
     # Set data for listing pending requests
@@ -801,15 +803,18 @@ def list_sharing_details(node_id=None, primary_user=False, request_id=None, list
 
     return node_json_resp
 
-def add_user_to_share_nodes(nodes=None, user=None):
+def add_user_to_share_nodes(nodes=None, user=None, profile_override=None):
     """
     Add user to share nodes
 
-    :param vars: `nodes` as key - Node Id of the node(s)
-    :type vars: str
+    :param nodes: Node Id of the node(s)
+    :type nodes: str
 
-    :param vars: `user` as key - User name
-    :type vars: str
+    :param user: User name
+    :type user: str
+    
+    :param profile_override: Optional profile to use for this operation
+    :type profile_override: str
 
     :raises Exception: If there is an issue
                        while adding user to share nodes
@@ -835,26 +840,31 @@ def add_user_to_share_nodes(nodes=None, user=None):
     api_input['user_name'] = user
     log.debug("API data set: {}".format(api_input))
 
-    # API
-    node_obj = node.Node(None, session.Session())
+    # API with profile-aware session
+    vars_dict = {'profile': profile_override} if profile_override else {}
+    curr_session = get_session_with_profile(vars_dict)
+    node_obj = node.Node(None, curr_session)
     node_json_resp = node_obj.add_user_for_sharing(api_input)
     log.debug("Set shared nodes response: {}".format(node_json_resp))
 
     return node_json_resp
 
-def remove_sharing(nodes=None, user=None, request_id=None):
+def remove_sharing(nodes=None, user=None, request_id=None, profile_override=None):
     """
     Remove user from shared nodes or
     Remove sharing request
 
-    :param vars: `nodes` as key - Node Id for the node
-    :type vars: str
+    :param nodes: Node Id for the node
+    :type nodes: str
 
-    :param vars: `user` as key - User name
-    :type vars: str
+    :param user: User name
+    :type user: str
 
-    :param vars: `request_id` as key - Id of sharing request
-    :type vars: str
+    :param request_id: Id of sharing request
+    :type request_id: str
+    
+    :param profile_override: Optional profile to use for this operation
+    :type profile_override: str
 
     :raises Exception: If there is an issue
                        while remove operation
@@ -865,7 +875,11 @@ def remove_sharing(nodes=None, user=None, request_id=None):
     print('\nPlease make sure current (logged-in) user is Primary user\n')
 
     node_json_resp = None
-    node_obj = node.Node(None, session.Session())
+    # Use profile-aware session
+    vars_dict = {'profile': profile_override} if profile_override else {}
+    curr_session = get_session_with_profile(vars_dict)
+    node_obj = node.Node(None, curr_session)
+    
     if request_id:
         # API call to remove the shared nodes request
         node_json_resp = node_obj.remove_shared_nodes_request(request_id)
@@ -1001,11 +1015,14 @@ def node_sharing_ops(vars=None):
 
         # Set operation to base action
         op = action
+        
+        # Get profile override if specified
+        profile_override = vars.get('profile')
 
         if action == 'add_user':
             # Share nodes with user
             print("Adding user to share node(s)")
-            node_json_resp = add_user_to_share_nodes(nodes=vars['nodes'], user=vars['user'])
+            node_json_resp = add_user_to_share_nodes(nodes=vars['nodes'], user=vars['user'], profile_override=profile_override)
 
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
@@ -1017,7 +1034,7 @@ def node_sharing_ops(vars=None):
                     )
         elif action == "accept":
             # Accept sharing request
-            node_json_resp = sharing_request_op(accept_request=True, request_id=vars['id'])
+            node_json_resp = sharing_request_op(accept_request=True, request_id=vars['id'], profile_override=profile_override)
 
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
@@ -1027,7 +1044,7 @@ def node_sharing_ops(vars=None):
                     )
         elif action == "decline":
             # Decline sharing request
-            node_json_resp = sharing_request_op(accept_request=False, request_id=vars['id'])
+            node_json_resp = sharing_request_op(accept_request=False, request_id=vars['id'], profile_override=profile_override)
 
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
@@ -1039,7 +1056,7 @@ def node_sharing_ops(vars=None):
             log.debug("Performing action: {}".format(action))
             # Cancel sharing request
             print("Cancelling request")
-            node_json_resp = remove_sharing(request_id=vars['id'])
+            node_json_resp = remove_sharing(request_id=vars['id'], profile_override=profile_override)
 
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
@@ -1051,7 +1068,7 @@ def node_sharing_ops(vars=None):
             log.debug("Performing action: {}".format(action))
             # Remove nodes shared with user
             print("Removing user from shared nodes")
-            node_json_resp = remove_sharing(nodes=vars['nodes'], user=vars['user'])
+            node_json_resp = remove_sharing(nodes=vars['nodes'], user=vars['user'], profile_override=profile_override)
 
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
@@ -1065,7 +1082,7 @@ def node_sharing_ops(vars=None):
             log.debug("List sharing details of nodes associated with user")
             print("Displaying sharing details")
             # List sharing details of all nodes associated with user
-            node_json_resp = list_sharing_details(node_id=vars['node'])
+            node_json_resp = list_sharing_details(node_id=vars['node'], profile_override=profile_override)
 
             # Print success response
             if 'node_sharing' in node_json_resp:
@@ -1082,7 +1099,8 @@ def node_sharing_ops(vars=None):
             # List pending sharing requests
             node_json_resp = list_sharing_details(primary_user=vars['primary_user'],
                                                     request_id=vars['id'],
-                                                    list_requests=True
+                                                    list_requests=True,
+                                                    profile_override=profile_override
                                                     )
             # Print success response
             if 'sharing_requests' in node_json_resp:
@@ -1102,7 +1120,8 @@ def get_node_config(vars=None):
     """
     Shows the configuration of the node.
 
-    :param vars: `nodeid` as key - Node ID for the node, defaults to `None`
+    :param vars: `nodeid` as key - Node ID for the node
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting node config
@@ -1112,7 +1131,8 @@ def get_node_config(vars=None):
     """
     try:
         node_config = None
-        n = node.Node(vars['nodeid'], session.Session())
+        s = get_session_with_profile(vars or {})
+        n = node.Node(vars['nodeid'], s)
         node_config = n.get_node_config()
     except Exception as get_nodes_err:
         log.error(get_nodes_err)
@@ -1125,7 +1145,8 @@ def get_node_status(vars=None):
     """
     Shows the online/offline status of the node.
 
-    :param vars: `nodeid` as key - Node ID for the node, defaults to `None`
+    :param vars: `nodeid` as key - Node ID for the node
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting node status
@@ -1134,7 +1155,8 @@ def get_node_status(vars=None):
     :rtype: None
     """
     try:
-        n = node.Node(vars['nodeid'], session.Session())
+        s = get_session_with_profile(vars or {})
+        n = node.Node(vars['nodeid'], s)
         node_status = n.get_node_status()
     except Exception as get_node_status_err:
         log.error(get_node_status_err)
@@ -1147,55 +1169,31 @@ def set_params(vars=None):
     """
     Set parameters of the node.
 
-    :param vars:
-        `nodeid` as key - Node ID for the node,\n
-        `data` as key - JSON data containing parameters to be set `or`\n
-        `filepath` as key - Path of the JSON file containing parameters
-                            to be set,\n
-        defaults to `None`
+    :param vars: `nodeid` as key - Node ID for the node
+                 `data` as key - JSON data containing parameters to be set
+                 `filepath` as key - Path of the JSON file containing parameters
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
+    :raises NetworkError: If there is a network connection issue during
+                          HTTP request for setting node params
     :raises Exception: If there is an HTTP issue while setting params or
                        JSON format issue in HTTP response
 
     :return: None on Success
     :rtype: None
     """
-    log.info('Setting params of the node with nodeid : ' + vars['nodeid'])
-    if 'data' in vars:
-        data = vars['data']
-    if 'filepath' in vars:
-        filepath = vars['filepath']
 
-    if data is not None:
-        log.debug('Setting node parameters using JSON data.')
-        # Trimming white spaces except the ones between two strings
-        data = re.sub(r"(?<![a-z]|[A-Z])\s(?![a-z]|[A-Z])|\
-            (?<=[a-z]|[A-Z])\s(?![a-z]|[A-Z])|\
-                (?<![a-z]|[A-Z])\s(?=[a-z]|[A-Z])", "", data)
-        try:
-            log.debug('JSON data : ' + data)
-            data = json.loads(data)
-        except Exception:
-            raise InvalidJSONError
-            return
-
-    elif filepath is not None:
-        log.debug('Setting node parameters using JSON file.')
-        file = Path(filepath)
-        if not file.exists():
-            log.error('File %s does not exist!' % file.name)
-            return
-        with open(file) as fh:
-            try:
-                data = json.load(fh)
-                log.debug('JSON filename :' + file.name)
-            except Exception:
-                raise InvalidJSONError
-                return
+    data = None
+    if vars['data']:
+        data = json.loads(vars['data'])
+    else:
+        with open(vars['filepath'], 'r') as data_file:
+            data = json.load(data_file)
 
     try:
-        n = node.Node(vars['nodeid'], session.Session())
+        s = get_session_with_profile(vars or {})
+        n = node.Node(vars['nodeid'], s)
         status = n.set_node_params(data)
     except SSLError:
         log.error(SSLError())
@@ -1213,7 +1211,8 @@ def get_params(vars=None):
     """
     Get parameters of the node.
 
-    :param vars: `nodeid` as key - Node ID for the node, defaults to `None`
+    :param vars: `nodeid` as key - Node ID for the node
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting params or
@@ -1224,7 +1223,8 @@ def get_params(vars=None):
     """
     try:
         params = None
-        n = node.Node(vars['nodeid'], session.Session())
+        s = get_session_with_profile(vars or {})
+        n = node.Node(vars['nodeid'], s)
         params = n.get_node_params()
     except SSLError:
         log.error(SSLError())
@@ -1246,7 +1246,8 @@ def remove_node(vars=None):
     """
     Removes the user node mapping.
 
-    :param vars: `nodeid` as key - Node ID for the node, defaults to `None`
+    :param vars: `nodeid` as key - Node ID for the node
+                 `profile` as key - Profile to use for the operation
     :type vars: dict | None
 
     :raises NetworkError: If there is a network connection issue during
@@ -1259,7 +1260,8 @@ def remove_node(vars=None):
     """
     log.info('Removing user node mapping for node ' + vars['nodeid'])
     try:
-        n = node.Node(vars['nodeid'], session.Session())
+        s = get_session_with_profile(vars or {})
+        n = node.Node(vars['nodeid'], s)
         params = n.remove_user_node_mapping()
     except Exception as remove_node_err:
         log.error(remove_node_err)
@@ -1271,51 +1273,24 @@ def remove_node(vars=None):
 
 def get_mqtt_host(vars=None):
     """
-    Returns MQTT Host endpoint
+    Shows the MQTT Host endpoint.
 
-    :param vars: No Parameters passed, defaults to `None`
+    :param vars: Optional parameters including 'profile'
     :type vars: dict | None
 
-    :raises NetworkError: If there is a network connection issue while
-                          getting MQTT Host endpoint
-    :raises Exception: If there is an HTTP issue while getting
-                       MQTT Host endpoint or JSON format issue in HTTP response
+    :raises Exception: If there is an HTTP issue while getting MQTT Host
 
-    :return: MQTT Host endpoint
-    :rtype: str
+    :return: None on Success
+    :rtype: None
     """
-    log.info("Getting MQTT Host endpoint.")
-    path = 'mqtt_host'
-    config = configmanager.Config()
-    request_url = config.get_host().split(serverconfig.VERSION)[0] + path
     try:
-        log.debug("Get MQTT Host request url : " + request_url)
-        response = requests.get(url=request_url,
-                                verify=configmanager.CERT_FILE)
-        log.debug("Get MQTT Host response : " + response.text)
-        response.raise_for_status()
-
-    except requests.exceptions.HTTPError as http_err:
-        log.debug(http_err)
-        raise HttpErrorResponse(response.json())
-    except requests.exceptions.SSLError:
-        raise SSLError
-    except requests.ConnectionError:
-        raise NetworkError
-        return
-    except Exception as mqtt_host_err:
-        log.error(mqtt_host_err)
-        return
-    try:
-        response = json.loads(response.text)
-    except Exception as json_decode_err:
-        log.error(json_decode_err)
-    if 'mqtt_host' in response:
-        log.info("Received MQTT Host endpoint successfully.")
-        print(response['mqtt_host'])
-    else:
-        log.error("MQTT Host does not exists.")
-    return response['mqtt_host']
+        s = get_session_with_profile(vars or {})
+        mqtt_host = s.get_mqtt_host()
+        if mqtt_host is not None:
+            print(mqtt_host)
+    except Exception as e:
+        log.error(e)
+    return
 
 
 def claim_node(vars=None):
@@ -1348,144 +1323,27 @@ def claim_node(vars=None):
 
 def ota_upgrade(vars=None):
     """
-    Upload OTA Firmware Image
-    and
-    Set image url returned in response as node params
+    Upload OTA Firmware image and start OTA Upgrade
+
+    :param vars: `nodeid` as key - Node ID for the node
+                 `otaimagepath` as key - OTA Firmware image path
+                 `profile` as key - Profile to use for the operation
+    :type vars: dict | None
+
+    :raises Exception: If there is an HTTP issue while uploading OTA Firmware image
+
+    :return: None on Success
+    :rtype: None
     """
     try:
         node_id = vars['nodeid']
-        img_file_path = vars['otaimagepath']
-        if os.path.isabs(img_file_path) is False:
-            img_file_path = os.path.join(os.getcwd(), img_file_path)
-        img_name = img_file_path.split('/')[-1].split('.bin')[0]
-        with open(img_file_path, 'rb') as f:
-            fw_img_bytes = f.read()
-        base64_fw_img = base64.b64encode(fw_img_bytes).decode('ascii')
-
-        retries = MAX_HTTP_CONNECTION_RETRIES
-        node_object = None
-        status = None
-        response = None
-        service_name = None
-        service_obj = None
-        service_config = None
-        node_params = None
-        param_url_to_set = None
-        curr_session = None
-        while retries > 0:
-            try:
-                # If session is expired then to initialise the new session
-                # internet connection is required.
-                if not curr_session:
-                    curr_session = session.Session()
-                if not node_object:
-                    node_object = node.Node(node_id, curr_session)
-                    log.info("Creating service object...")
-                if not service_obj:
-                    service_obj = service.Service()
-                    log.info("Checking service " + service.OTA_SERVICE_TYPE + " in node config...")
-                    print("Checking " + service.OTA_SERVICE_TYPE + " in node config...")
-                if not service_config and not service_name:
-                    service_config, service_name = service_obj.verify_service_exists(node_object, service.OTA_SERVICE_TYPE)
-                    if not service_config:
-                        log.error(service.OTA_SERVICE_TYPE + " not found.")
-                        break
-                    log.info("Checking service " + service.OTA_SERVICE_TYPE + " in config...Success")
-                    log.debug("Service config received: " + str(service_config) +
-                              " Service name received: " + str(service_name))
-                    print("Uploading OTA Firmware Image...This may take time...")
-                    log.info("Uploading OTA Firmware Image...This may take time...")
-                if not status and not response:
-                    # Upload OTA Firwmare Image
-                    status, response = service_obj.upload_ota_image(node_object, img_name, base64_fw_img)
-                    if status:
-                        break
-            except SSLError:
-                log.error(SSLError())
-                break
-            except (NetworkError, RequestTimeoutError) as conn_err:
-                print(conn_err)
-                log.warn(conn_err)
-            except Exception as node_init_err:
-                log.error(node_init_err)
-                break
-            time.sleep(5)
-            retries -= 1
-            if retries:
-                print("Retries left:", retries)
-                log.info("Retries left: " + str(retries))
-
-        if node_object is None:
-            log.error('Initialising new session...Failed\n')
-            return
-
-        if not status or not 'success' in status:
-            print("\n")
-            log.error("OTA Upgrade...Failed")
-            log.debug('OTA Upgrade...Failed '
-                      'status: ' + str(status) + ' response: ' + str(response))
-            return
-
-        log.info('Upload OTA Firmware Image Request...Success')
-        log.debug("Upload OTA Firmware Image Request - Status: " + json.dumps(status) +
-                  " Response: " + json.dumps(response))
-
-
-        retries = MAX_HTTP_CONNECTION_RETRIES
-        ota_start_status = None
-        node_params = None
-        service_read_params = None
-        service_write_params = None
-        ota_status = None
-
-        while retries > 0:
-            try:
-                if 'image_url' in response:
-                    param_url_to_set = response["image_url"]
-
-                    if not service_read_params and not service_write_params:
-                        log.info("Getting service params from node config")
-                        service_read_params, service_write_params = service_obj.get_service_params(service_config)
-                        log.debug("Service params received with read properties: " + str(service_read_params) +
-                                  " Service params received with write properties: " + str(service_write_params))
-                        log.info("Getting node params...")
-                    if not node_params:
-                        node_params = node_object.get_node_params()
-                        log.debug("Node params received: " + json.dumps(node_params))
-                        print("Setting the OTA URL parameter...")
-
-                    if not ota_start_status:
-                        ota_start_status = service_obj.start_ota(node_object, node_params, service_name,
-                                                        service_write_params, param_url_to_set)
-                        log.debug("OTA status received: " + str(ota_start_status))
-                        if not ota_start_status:
-                            log.error("Failed to start OTA service...Exiting...")
-                            break
-                        print("Getting OTA Status...")
-                    if not ota_status:
-                        ota_status = service_obj.check_ota_status(node_object, service_name, service_read_params)
-                        break
-            except SSLError:
-                log.error(SSLError())
-                break
-            except (NetworkError, RequestTimeoutError) as conn_err:
-                print(conn_err)
-                log.warn(conn_err)
-            except Exception as node_init_err:
-                log.error(node_init_err)
-                break
-            time.sleep(5)
-            retries -= 1
-            if retries:
-                print("Retries left:", retries)
-                log.info("Retries left: " + str(retries))
-
-        if ota_status in [None, False]:
-            log.error("OTA Upgrade...Failed")
-            log.debug('OTA Upgrade...Failed '
-                      'ota_status: ' + str(ota_status))
-    except KeyError as key_err:
-        log.error("Key Error: " + str(key_err))
-    except Exception as ota_err:
-        log.error(ota_err)
+        ota_image_path = vars['otaimagepath']
+        
+        s = get_session_with_profile(vars or {})
+        n = node.Node(node_id, s)
+        response = n.upload_ota_image(ota_image_path)
+        if response is not None:
+            print(json.dumps(response, indent=4))
+    except Exception as e:
+        log.error(e)
     return

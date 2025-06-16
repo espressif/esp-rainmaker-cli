@@ -35,6 +35,15 @@ deactivate
 
 The CLI supports the following main commands:
 
+### Configuration and Profile Management
+
+* `configure --region <region>` - Configure ESP RainMaker region (china, global)
+* `profile list` - List all available profiles
+* `profile current` - Show current profile information  
+* `profile switch <name>` - Switch to a different profile
+* `profile add <name> --base-url <url>` - Add a new custom profile
+* `profile remove <name>` - Remove a custom profile
+
 ### User Management
 
 * `login` - Log in to the ESP RainMaker service
@@ -90,6 +99,7 @@ The CLI supports the following main commands:
 
 For detailed documentation on specific commands, refer to the following files:
 
+* [Profile Management](./commands/profile_management.md)
 * [Schedule Management](./commands/scheduling.md)
 * [Node Sharing](./commands/node_sharing.md)
 * [Parameter Management](./commands/parameters.md)
