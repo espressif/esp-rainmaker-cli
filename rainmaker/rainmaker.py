@@ -190,7 +190,7 @@ def main():
     setschedule_parser.add_argument('nodeid',
                                   type=str,
                                   metavar='<nodeid>',
-                                  help='Node ID for the node')
+                                  help='Node ID for the node (or comma-separated list of node IDs)')
     setschedule_parser.add_argument('--operation',
                                   type=str,
                                   required=True,
@@ -243,7 +243,7 @@ def main():
                                                    ' single quotes')
     setparams_parser.add_argument('nodeid',
                                   metavar='<nodeid>',
-                                  help='Node ID for the node')
+                                  help='Node ID for the node (or comma-separated list of node IDs)')
     setparams_parser = setparams_parser.add_mutually_exclusive_group(
         required=True)
 
@@ -251,9 +251,7 @@ def main():
                                   help='Path of the JSON file\
                                         containing parameters to be set')
     setparams_parser.add_argument('--data',
-                                  help='JSON data containing parameters\
-                                        to be set. Note: Enter JSON data\
-                                        in single quotes')
+                                  help='JSON data to be set')
     # Note: setparams_parser is mutually exclusive group, so we add profile to the parent
     setparams_main_parser = subparsers._name_parser_map['setparams']
     add_profile_argument(setparams_main_parser)
@@ -262,7 +260,6 @@ def main():
     getparams_parser = subparsers.add_parser('getparams',
                                              help='Get node parameters')
     getparams_parser.add_argument('nodeid',
-                                  type=str,
                                   metavar='<nodeid>',
                                   help='Node ID for the node')
     add_profile_argument(getparams_parser)

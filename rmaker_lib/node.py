@@ -179,6 +179,8 @@ class Node:
         log.info("Received node parameters successfully.")
         return response
 
+
+
     def set_node_params(self, data):
         """
         Set parameters of the node.
@@ -197,16 +199,46 @@ class Node:
         socket.setdefaulttimeout(10)
         log.info("Updating parameters of the node with nodeid : " +
                  self.__nodeid)
+        
+        # Always use the batch API format
+        batch_data = [{
+            "node_id": self.__nodeid,
+            "payload": data
+        }]
+        
+        result = self._set_params_api(batch_data, self.config, self.request_header)
+        
+        # Return boolean for backward compatibility with existing code
+        return result.get("success", True)
+
+    @staticmethod
+    def _set_params_api(batch_data, config, request_header):
+        """
+        Internal method to call the set params API.
+        
+        :param batch_data: List of node data in format [{"node_id": "string", "payload": {...}}]
+        :type batch_data: list
+        :param config: Config object for getting host
+        :param request_header: Request headers
+        :type request_header: dict
+        
+        :raises NetworkError: If there is a network connection issue while setting node params
+        :raises Exception: If there is an HTTP issue while setting node params
+        
+        :return: Dictionary with success/failure details for each node
+        :rtype: dict
+        """
+        socket.setdefaulttimeout(10)
         path = 'user/nodes/params'
-        query_parameters = 'nodeid=' + self.__nodeid
-        setparams_url = self.config.get_host() + path + '?' + query_parameters
+        setparams_url = config.get_host() + path
+        
         try:
             log.debug("Set node params request url : " + setparams_url)
-            log.debug("Set node params request payload : " + json.dumps(data))
-            log.debug("Set node params request header : " + json.dumps(self.request_header))
+            log.debug("Set node params request payload : " + json.dumps(batch_data))
+            log.debug("Set node params request header : " + json.dumps(request_header))
             response = requests.put(url=setparams_url,
-                                    data=json.dumps(data),
-                                    headers=self.request_header,
+                                    data=json.dumps(batch_data),
+                                    headers=request_header,
                                     verify=configmanager.CERT_FILE,
                                     timeout=(5.0, 5.0))
             log.debug("Set node params response : " + response.text)
@@ -225,8 +257,88 @@ class Node:
         except RequestException as set_nodes_params_err:
             log.debug(set_nodes_params_err)
             raise set_nodes_params_err
-        log.info("Updated node parameters successfully.")
-        return True
+        
+        # Parse response and analyze individual node results
+        response_data = json.loads(response.text)
+        
+        if not isinstance(response_data, list):
+            # Handle legacy response format or unexpected response
+            log.info("Updated node parameters successfully.")
+            return {"success": True, "results": []}
+        
+        # Analyze each node's result
+        successful_nodes = []
+        failed_nodes = []
+        
+        for node_result in response_data:
+            node_id = node_result.get("node_id", "unknown")
+            status = node_result.get("status", "unknown")
+            description = node_result.get("description", "No description")
+            
+            if status == "success":
+                successful_nodes.append({
+                    "node_id": node_id,
+                    "description": description
+                })
+            else:
+                failed_nodes.append({
+                    "node_id": node_id,
+                    "status": status,
+                    "description": description
+                })
+        
+        result = {
+            "success": len(failed_nodes) == 0,
+            "total_nodes": len(response_data),
+            "successful_nodes": successful_nodes,
+            "failed_nodes": failed_nodes,
+            "results": response_data
+        }
+        
+        if result["success"]:
+            log.info(f"Updated node parameters successfully for all {len(successful_nodes)} nodes.")
+        else:
+            log.warning(f"Updated parameters for {len(successful_nodes)} of {len(response_data)} nodes. {len(failed_nodes)} failed.")
+        
+        return result
+
+    @staticmethod
+    def set_node_params_multiple(node_params_list, session):
+        """
+        Set parameters for multiple nodes in a single API call.
+        
+        :param node_params_list: List of dictionaries with 'node_id' and 'payload' keys
+        :type node_params_list: list
+        :param session: Session object for authentication
+        :type session: Session
+        
+        :raises NetworkError: If there is a network connection issue while setting node params
+        :raises Exception: If there is an HTTP issue while setting node params
+        
+        :return: Dictionary with success/failure details for each node
+        :rtype: dict
+        
+        Example:
+            node_params_list = [
+                {
+                    "node_id": "node1",
+                    "payload": {"Light": {"Power": True, "Brightness": 80}}
+                },
+                {
+                    "node_id": "node2", 
+                    "payload": {"Switch": {"Power": False}}
+                }
+            ]
+        """
+        if not node_params_list:
+            raise ValueError("node_params_list cannot be empty")
+            
+        for item in node_params_list:
+            if not isinstance(item, dict) or 'node_id' not in item or 'payload' not in item:
+                raise ValueError("Each item must be a dict with 'node_id' and 'payload' keys")
+                
+        log.info(f"Updating parameters for {len(node_params_list)} nodes")
+        return Node._set_params_api(node_params_list, session.config, session.request_header)
 
     def __user_node_mapping(self, secret_key, operation):
         """
