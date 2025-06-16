@@ -14,6 +14,7 @@ from rmaker_cmd.cmd_response import get_cmd_requests, create_cmd_request
 from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
+from rmaker_cmd.group import group_add, group_remove, group_edit, group_list, group_show, group_add_nodes, group_remove_nodes, group_list_nodes
 
 # Import the version
 from rainmaker.version import VERSION
@@ -33,7 +34,7 @@ def display_version(vars=None):
 def add_profile_argument(parser):
     """
     Add --profile argument to a parser.
-    
+
     :param parser: The argument parser to add the profile argument to
     :type parser: argparse.ArgumentParser
     """
@@ -61,22 +62,22 @@ def main():
                                   type=str,
                                   metavar='<region>',
                                   help='Region for ESP RainMaker, Valid Values: china, global. Default: global')
-    
+
     configure_parser.set_defaults(func=set_region_configuration)
 
     # New dedicated profile command with subcommands
     profile_parser = subparsers.add_parser("profile",
                                           help="Manage ESP RainMaker profiles")
     profile_subparsers = profile_parser.add_subparsers(dest='profile_command', help='Profile operations')
-    
+
     # profile list
     profile_list_parser = profile_subparsers.add_parser('list', help='List all available profiles')
     profile_list_parser.set_defaults(func=profile_list)
-    
-    # profile current  
+
+    # profile current
     profile_current_parser = profile_subparsers.add_parser('current', help='Show current profile information')
     profile_current_parser.set_defaults(func=profile_current)
-    
+
     # profile switch
     profile_switch_parser = profile_subparsers.add_parser('switch', help='Switch to a different profile')
     profile_switch_parser.add_argument('profile_name',
@@ -84,7 +85,7 @@ def main():
                                        metavar='<profile_name>',
                                        help='Name of the profile to switch to')
     profile_switch_parser.set_defaults(func=profile_switch)
-    
+
     # profile add
     profile_add_parser = profile_subparsers.add_parser('add', help='Add a new custom profile')
     profile_add_parser.add_argument('profile_name',
@@ -101,7 +102,7 @@ def main():
                                     metavar='<description>',
                                     help='Description for the custom profile (optional)')
     profile_add_parser.set_defaults(func=profile_add)
-    
+
     # profile remove
     profile_remove_parser = profile_subparsers.add_parser('remove', help='Remove a custom profile')
     profile_remove_parser.add_argument('profile_name',
@@ -552,6 +553,77 @@ def main():
         'list_nodes': list_nodes_op_parser,
         'list_requests': list_request_op_parser
         }
+
+    # Group Management
+    group_parser = subparsers.add_parser('group',
+                                         help='Manage device groups')
+    group_subparsers = group_parser.add_subparsers(dest='group_command', help='Group operations')
+
+    # group add
+    group_add_parser = group_subparsers.add_parser('add', help='Create a new group')
+    group_add_parser.add_argument('--name', type=str, required=True, help='Name of the group')
+    group_add_parser.add_argument('--description', type=str, help='Description of the group')
+    group_add_parser.add_argument('--mutually-exclusive', action='store_true', help='Set mutually exclusive flag')
+    group_add_parser.add_argument('--custom-data', type=str, help='Custom data as JSON string')
+    group_add_parser.add_argument('--nodes', type=str, help='Comma separated list of node IDs')
+    group_add_parser.add_argument('--type', type=str, help='Type of the group')
+    group_add_parser.add_argument('--parent-group-id', type=str, help='Parent group ID')
+    add_profile_argument(group_add_parser)
+    group_add_parser.set_defaults(func=group_add)
+
+    # group remove
+    group_remove_parser = group_subparsers.add_parser('remove', help='Delete a group')
+    group_remove_parser.add_argument('--group-id', type=str, required=True, help='ID of the group to delete')
+    add_profile_argument(group_remove_parser)
+    group_remove_parser.set_defaults(func=group_remove)
+
+    # group edit
+    group_edit_parser = group_subparsers.add_parser('edit', help='Edit a group')
+    group_edit_parser.add_argument('--group-id', type=str, required=True, help='ID of the group to edit')
+    group_edit_parser.add_argument('--name', type=str, help='New name for the group')
+    group_edit_parser.add_argument('--description', type=str, help='New description for the group')
+    group_edit_parser.add_argument('--mutually-exclusive', type=str, choices=['true', 'false', '1', '0'], help='Set mutually exclusive flag (true/false or 1/0)')
+    group_edit_parser.add_argument('--custom-data', type=str, help='Custom data as JSON string')
+    group_edit_parser.add_argument('--type', type=str, help='Type of the group')
+    group_edit_parser.add_argument('--parent-group-id', type=str, help='Parent group ID')
+    add_profile_argument(group_edit_parser)
+    group_edit_parser.set_defaults(func=group_edit)
+
+    # group list
+    group_list_parser = group_subparsers.add_parser('list', help='List all groups')
+    group_list_parser.add_argument('--sub-groups', action='store_true', help='Include sub-groups in the output to view hierarchy')
+    add_profile_argument(group_list_parser)
+    group_list_parser.set_defaults(func=group_list)
+
+    # group show
+    group_show_parser = group_subparsers.add_parser('show', help='Show group details')
+    group_show_parser.add_argument('--group-id', type=str, required=True, help='ID of the group to show')
+    group_show_parser.add_argument('--sub-groups', action='store_true', help='Include sub-groups in the output')
+    add_profile_argument(group_show_parser)
+    group_show_parser.set_defaults(func=group_show)
+
+    # group add-nodes
+    group_add_nodes_parser = group_subparsers.add_parser('add-nodes', help='Add nodes to a group')
+    group_add_nodes_parser.add_argument('--group-id', type=str, required=True, help='ID of the group')
+    group_add_nodes_parser.add_argument('--nodes', type=str, required=True, help='Comma separated list of node IDs to add')
+    add_profile_argument(group_add_nodes_parser)
+    group_add_nodes_parser.set_defaults(func=group_add_nodes)
+
+    # group remove-nodes
+    group_remove_nodes_parser = group_subparsers.add_parser('remove-nodes', help='Remove nodes from a group')
+    group_remove_nodes_parser.add_argument('--group-id', type=str, required=True, help='ID of the group')
+    group_remove_nodes_parser.add_argument('--nodes', type=str, required=True, help='Comma separated list of node IDs to remove')
+    add_profile_argument(group_remove_nodes_parser)
+    group_remove_nodes_parser.set_defaults(func=group_remove_nodes)
+
+    # group list-nodes
+    group_list_nodes_parser = group_subparsers.add_parser('list-nodes', help='List nodes in a group')
+    group_list_nodes_parser.add_argument('--group-id', type=str, required=True, help='ID of the group')
+    group_list_nodes_parser.add_argument('--node-details', action='store_true', help='Show detailed node info')
+    group_list_nodes_parser.add_argument('--sub-groups', action='store_true', help='Include sub-groups in the output')
+    group_list_nodes_parser.add_argument('--raw', action='store_true', help='Print raw JSON output (only with --node-details)')
+    add_profile_argument(group_list_nodes_parser)
+    group_list_nodes_parser.set_defaults(func=group_list_nodes)
 
     args = parser.parse_args()
 

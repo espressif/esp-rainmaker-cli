@@ -19,22 +19,22 @@ class Session:
     def __init__(self, profile_override=None):
         """
         Instantiate session for logged in user.
-        
+
         :param profile_override: Optional profile name to use instead of current profile.
         """
         self.config = configmanager.Config(profile_override=profile_override)
         log.info("Initialising session for user")
-        
+
         # Check if user is logged in to current profile
         current_profile = self.config.get_current_profile_name()
         if not self.config.profile_manager.has_profile_tokens(current_profile):
             profile_config = self.config.profile_manager.get_profile_config(current_profile)
             profile_type = "builtin" if profile_config.get('builtin', False) else "custom"
             is_builtin = profile_config.get('builtin', False)
-            
+
             print(f"\n❌ Not logged in to profile '{current_profile}'")
             print(f"Please login to this {profile_type} profile first:")
-            
+
             if profile_type == "custom":
                 print(f"   esp-rainmaker-cli login --user_name <your_email>")
             else:
@@ -43,7 +43,7 @@ class Session:
                 print(f"   esp-rainmaker-cli login --user_name <your_email>")
             print()
             raise InvalidConfigError("Not logged in to current profile")
-        
+
         self.id_token = self.config.get_access_token()
         if self.id_token is None:
             print(f"\n❌ No valid tokens found for profile '{current_profile}'")
@@ -51,7 +51,7 @@ class Session:
             print(f"   esp-rainmaker-cli login")
             print()
             raise InvalidConfigError("No valid access token found")
-        
+
         # Check if tokens might be for wrong region by looking at token issuer
         try:
             import base64
@@ -64,11 +64,11 @@ class Session:
                 padding = 4 - (len(payload) % 4)
                 if padding != 4:
                     payload += '=' * padding
-                
+
                 decoded_payload = base64.b64decode(payload)
                 token_data = json_lib.loads(decoded_payload)
                 token_issuer = token_data.get('iss', '')
-                
+
                 # Check if token issuer matches current profile region
                 current_region = self.config.get_region()
                 if current_region == 'china' and 'cognito-idp.us-east-1' in token_issuer:
@@ -86,7 +86,7 @@ class Session:
         except Exception:
             # If token inspection fails, continue - let the API call fail with proper error
             pass
-        
+
         self.request_header = {'Content-Type': 'application/json',
                                'Authorization': self.id_token}
 
@@ -103,11 +103,11 @@ class Session:
         """
         log.info("Getting nodes associated with the user.")
         path = 'user/nodes'
-        
+
         node_map = {}
         start_id = None
         has_more = True
-        
+
         while has_more:
             query_parameters = ''
             if start_id:
@@ -115,7 +115,7 @@ class Session:
                 getnodes_url = f"{self.config.get_host()}{path}?{query_parameters}"
             else:
                 getnodes_url = self.config.get_host() + path
-                
+
             try:
                 log.debug("Get nodes request url : " + getnodes_url)
                 response = requests.get(url=getnodes_url,
@@ -137,13 +137,13 @@ class Session:
             response_data = json.loads(response.text)
             for nodeid in response_data['nodes']:
                 node_map[nodeid] = node.Node(nodeid, self)
-                
+
             # Check if there are more nodes to fetch
             if 'next_id' in response_data and response_data['next_id']:
                 start_id = response_data['next_id']
             else:
                 has_more = False
-                
+
         log.info(f"Received all {len(node_map)} nodes for user successfully.")
         return node_map
 
@@ -160,16 +160,16 @@ class Session:
         """
         log.info("Getting detailed information for all nodes.")
         path = 'user/nodes'
-        
+
         all_nodes = []
         start_id = None
         has_more = True
-        
+
         while has_more:
             query_parameters = 'node_details=true'
             if start_id:
                 query_parameters += f'&start_id={start_id}'
-            
+
             getnodedetails_url = self.config.get_host() + path + '?' + query_parameters
 
             try:
@@ -191,23 +191,23 @@ class Session:
                 raise Exception(response.text)
 
             response_data = json.loads(response.text)
-            
+
             # Add nodes from current page to result
             if 'node_details' in response_data:
                 all_nodes.extend(response_data['node_details'])
-            
+
             # Check if there are more nodes to fetch
             if 'next_id' in response_data and response_data['next_id']:
                 start_id = response_data['next_id']
             else:
                 has_more = False
-        
+
         # Construct the final response with all nodes
         node_details = {
             'node_details': all_nodes,
             'total': len(all_nodes)
         }
-        
+
         log.info(f"Received detailed information for all {len(all_nodes)} nodes successfully.")
         return node_details
 
@@ -217,7 +217,7 @@ class Session:
 
         :param node_id: ID of the node to fetch details for
         :type node_id: str
-        
+
         :raises NetworkError: If there is a network connection issue
                               while getting node details
         :raises Exception: If there is an HTTP issue while getting node details
@@ -400,3 +400,167 @@ class Session:
             return json.loads(response.text)
         except Exception as resp_err:
             raise resp_err
+
+    def create_group(self, group_name, description=None, mutually_exclusive=None, custom_data=None, nodes=None, type_=None, parent_group_id=None):
+        """Create a new group. Returns group_id in response."""
+        path = 'user/node_group'
+        payload = {
+            'group_name': group_name
+        }
+        if parent_group_id:
+            payload['parent_group_id'] = parent_group_id
+        else:
+            payload['is_matter'] = True
+        if description:
+            payload['description'] = description
+        if mutually_exclusive is not None:
+            payload['mutually_exclusive'] = mutually_exclusive
+        if custom_data:
+            payload['custom_data'] = custom_data
+        if nodes:
+            payload['nodes'] = nodes
+        if type_:
+            payload['type'] = type_
+        url = self.config.get_host() + path
+        log.debug(f"Create group request url : {url}")
+        log.debug(f"Create group request payload : {json.dumps(payload)}")
+        log.debug(f"Create group request header : {self.request_header}")
+        try:
+            response = requests.post(url=url, headers=self.request_header, json=payload, verify=configmanager.CERT_FILE)
+            log.debug(f"Create group response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to create group: {e}')
+            raise
+
+    def remove_group(self, group_id):
+        """Remove a group."""
+        path = f'user/node_group?group_id={group_id}'
+        url = self.config.get_host() + path
+        log.debug(f"Remove group request url : {url}")
+        log.debug(f"Remove group request header : {self.request_header}")
+        try:
+            response = requests.delete(url=url, headers=self.request_header, verify=configmanager.CERT_FILE)
+            log.debug(f"Remove group response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to delete group: {e}')
+            raise
+
+    def edit_group(self, group_id, group_name=None, description=None, mutually_exclusive=None, custom_data=None, nodes=None, type_=None, parent_group_id=None, operation=None):
+        """Edit a group."""
+        path = f'user/node_group?group_id={group_id}'
+        payload = {}
+        if group_name:
+            payload['group_name'] = group_name
+        if description:
+            payload['description'] = description
+        if mutually_exclusive is not None:
+            payload['mutually_exclusive'] = mutually_exclusive
+        if custom_data:
+            payload['custom_data'] = custom_data
+        if nodes:
+            payload['nodes'] = nodes
+        if type_:
+            payload['type'] = type_
+        if parent_group_id:
+            payload['parent_group_id'] = parent_group_id
+        if operation:
+            payload['operation'] = operation
+        url = self.config.get_host() + path
+        log.debug(f"Edit group request url : {url}")
+        log.debug(f"Edit group request payload : {json.dumps(payload)}")
+        log.debug(f"Edit group request header : {self.request_header}")
+        try:
+            response = requests.put(url=url, headers=self.request_header, json=payload, verify=configmanager.CERT_FILE)
+            log.debug(f"Edit group response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to edit group: {e}')
+            raise
+
+    def list_groups(self, limit=None, start_id=None, sub_groups=False):
+        """List groups."""
+        path = 'user/node_group'
+        params = {}
+        if limit:
+            params['limit'] = limit
+        if start_id:
+            params['start_id'] = start_id
+        if sub_groups:
+            params['sub_groups'] = 'true'
+        url = self.config.get_host() + path
+        log.debug(f"List groups request url : {url}")
+        log.debug(f"List groups request params : {params}")
+        log.debug(f"List groups request header : {self.request_header}")
+        try:
+            all_groups = []
+            while True:
+                response = requests.get(url=url, headers=self.request_header, params=params, verify=configmanager.CERT_FILE)
+                log.debug(f"List groups response : {response.text}")
+                response.raise_for_status()
+                data = response.json()
+                if 'groups' in data:
+                    all_groups.extend(data['groups'])
+                if 'next_id' in data and data['next_id']:
+                    params['start_id'] = data['next_id']
+                else:
+                    break
+            return all_groups
+        except Exception as e:
+            log.error(f'Failed to list groups: {e}')
+            raise
+
+    def show_group(self, group_id, sub_groups=False):
+        """Show group details."""
+        path = f'user/node_group?group_id={group_id}'
+        if sub_groups:
+            path += '&sub_groups=true'
+        url = self.config.get_host() + path
+        log.debug(f"Show group request url : {url}")
+        log.debug(f"Show group request header : {self.request_header}")
+        try:
+            response = requests.get(url=url, headers=self.request_header, verify=configmanager.CERT_FILE)
+            log.debug(f"Show group response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to get group details: {e}')
+            raise
+
+    def add_nodes_to_group(self, group_id, nodes):
+        """Add nodes to a group."""
+        log.debug(f"Add nodes to group: group_id={group_id}, nodes={nodes}")
+        return self.edit_group(group_id, nodes=nodes, operation="add")
+
+    def remove_nodes_from_group(self, group_id, nodes):
+        """Remove nodes from a group."""
+        log.debug(f"Remove nodes from group: group_id={group_id}, nodes={nodes}")
+        return self.edit_group(group_id, nodes=nodes, operation="remove")
+
+    def list_nodes_in_group(self, group_id, node_details=False, node_list=False, sub_groups=False):
+        """List nodes in a group."""
+        path = f'user/node_group?group_id={group_id}'
+        params = []
+        if node_details:
+            params.append('node_details=true')
+        elif node_list:
+            params.append('node_list=true')
+        if sub_groups:
+            params.append('sub_groups=true')
+        if params:
+            path += '&' + '&'.join(params)
+        url = self.config.get_host() + path
+        log.debug(f"List nodes in group request url : {url}")
+        log.debug(f"List nodes in group request header : {self.request_header}")
+        try:
+            response = requests.get(url=url, headers=self.request_header, verify=configmanager.CERT_FILE)
+            log.debug(f"List nodes in group response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to list nodes in group: {e}')
+            raise
