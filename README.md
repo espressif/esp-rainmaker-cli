@@ -1,4 +1,6 @@
-# ESP RainMaker Command Line utility
+# ESP RainMaker CLI
+
+[![PyPI version](https://img.shields.io/pypi/v/esp-rainmaker-cli)](https://pypi.org/project/esp-rainmaker-cli/)
 
 Welcome to the `esp-rainmaker-cli` repository!
 
@@ -38,6 +40,6 @@ If you are making any changes to the tool then in order to test the changes plea
 python3 -m pip install -e .
 ```
 
-This will install esp-rainmaker-cli's dependencies and create an executable script wrappers in the user’s bin
+This will install esp-rainmaker-cli's dependencies and create an executable script wrappers in the user's bin
 directory. The wrappers will run the scripts found in the git working directory directly, so any time the working
 directory contents change it will pick up the new versions.

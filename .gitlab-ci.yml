@@ -1,0 +1,46 @@
+image: python:3.9
+
+stages:
+  - validate
+
+validate_release_info:
+  stage: validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"  # Run on MRs
+    - if: $CI_COMMIT_BRANCH == "master"  # Also run on direct master pushes
+  script:
+    # Install required packages
+    - pip install --upgrade pip setuptools build
+
+    # Get current version from setup.py
+    - CURRENT_VERSION=$(python setup.py --version 2>/dev/null)
+    - echo "Checking version $CURRENT_VERSION"
+
+    # Validate changelog entry exists
+    - |
+      if ! grep -q "## \[$CURRENT_VERSION\]" CHANGELOG.md; then
+        echo "Error: Version $CURRENT_VERSION not found in CHANGELOG.md"
+        echo "Please add a changelog entry for version $CURRENT_VERSION before merging"
+        exit 1
+      fi
+
+    # Validate changelog format
+    - |
+      if ! grep -q "^## \[.*\] - [0-9]\{2\}-[A-Z][a-z]\{2\}-[0-9]\{4\}" CHANGELOG.md; then
+        echo "Error: Changelog contains entries with incorrect format"
+        echo "Each version should follow format: ## [VERSION] - DD-MMM-YYYY"
+        exit 1
+      fi
+
+    # Validate version sections have content
+    - |
+      EMPTY_SECTIONS=$(awk '/^## \[.*\]/{if (content == 0 && NR > 4) print prev; content=0; prev=$0; next} /^### /{next} NF{content=1}' CHANGELOG.md)
+      if [ ! -z "$EMPTY_SECTIONS" ]; then
+        echo "Error: Found empty version sections in changelog:"
+        echo "$EMPTY_SECTIONS"
+        exit 1
+      fi
+
+    # Build package to validate setup.py and structure
+    - python -m build --sdist --wheel .
+    - echo "✅ All validation checks passed!"
