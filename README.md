@@ -23,7 +23,7 @@ python3 -m pip install esp-rainmaker-cli
 
 ## Usage
 
-Please check the [CLI Usage guide](https://rainmaker.espressif.com/docs/cli-usage.html) for more information.
+Please check the [CLI Usage guide](docs/README.md) for more information.
 
 For more help, you can also run the following command:
 

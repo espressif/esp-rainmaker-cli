@@ -487,12 +487,12 @@ def create_config_dir():
 
 
 def get_mqtt_endpoint():
-    # Set node claim data
-    sys.stdout = StringIO()
+    # Get MQTT endpoint directly from session
     log.info("Getting MQTT Host")
-    endpointinfo = node.get_mqtt_host(None)
-    log.debug("Endpoint info received: " + endpointinfo)
-    sys.stdout = sys.__stdout__
+    from rmaker_lib.session import Session
+    s = Session()
+    endpointinfo = s.get_mqtt_host()
+    log.debug("Endpoint info received: " + str(endpointinfo))
     return endpointinfo
 
 

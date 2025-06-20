@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.5.1] - 20-Jun-2025
+### Fixed
+- `claim` command was failing
+
 ## [1.5.0] - 18-Jun-2025
 ### Added
 - Group management support with the following subcommands:
