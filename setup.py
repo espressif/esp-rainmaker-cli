@@ -56,7 +56,7 @@ setup(
     project_urls = {
         "Documentation": "https://rainmaker.espressif.com/docs/cli-setup",
         "Source": "https://github.com/espressif/esp-rainmaker-cli",
-        "Changelog": "CHANGELOG.md",
+        "Changelog": "https://github.com/espressif/esp-rainmaker-cli/blob/master/CHANGELOG.md",
     },
 
     author = "Espressif Systems",
