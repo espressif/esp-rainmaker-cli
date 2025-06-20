@@ -18,6 +18,23 @@ def get_install_requires():
         required = f.read().splitlines()
         return required
 
+def get_long_description():
+    with open('README.md', 'r', encoding='utf-8') as f:
+        readme = f.read()
+
+    try:
+        with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
+            changelog = f.read()
+    except FileNotFoundError:
+        changelog = ""
+
+    return f"""{readme}
+
+Changelog
+---------
+{changelog}
+"""
+
 try:
     from setuptools import find_packages, setup
 except ImportError:
@@ -28,37 +45,18 @@ except ImportError:
     )
     exit(1)
 
-long_description = """
-=================
-esp-rainmaker-cli
-=================
-ESP RainMaker command-line interface (CLI) utility, python utility to perform host based claiming.
-
-Source code for `esp-rainmaker-cli` is
-`hosted on github <https://github.com/espressif/esp-rainmaker-cli>`_.
-
-Documentation
--------------
-Visit online `RainMaker CLI setup and usage guide <https://rainmaker.espressif.com/docs/cli-setup>`_.
-Or run `esp-rainmaker-cli -h`.
-
-License
--------
-The License for the project can be found
-`here <https://github.com/espressif/esp-rainmaker-cli/tree/master/LICENSE>`_
-"""
-
 setup(
     name = "esp-rainmaker-cli",
     version = VERSION,
     description = "A python utility to perform host based claiming",
-    long_description = long_description,
-    long_description_content_type = 'text/x-rst',
+    long_description = get_long_description(),
+    long_description_content_type = 'text/markdown',
     url = "https://github.com/espressif/esp-rainmaker-cli",
 
     project_urls = {
         "Documentation": "https://rainmaker.espressif.com/docs/cli-setup",
         "Source": "https://github.com/espressif/esp-rainmaker-cli",
+        "Changelog": "CHANGELOG.md",
     },
 
     author = "Espressif Systems",
@@ -85,6 +83,7 @@ setup(
     package_data = {
         'server_cert':['server_cert.pem'],
         'rmaker_cmd':['html/*.html'],
+        '': ['CHANGELOG.md'],  # Include CHANGELOG.md in the package root
     },
     entry_points={
         'console_scripts': [
