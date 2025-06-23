@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.5.2] - 23-Jun-2025
+### Fixed
+- `requirement`: bump esp-idf-nvs-partition-gen to v0.1.9
+
 ## [1.5.1] - 20-Jun-2025
 ### Fixed
 - `claim` command was failing
