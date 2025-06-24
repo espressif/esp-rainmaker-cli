@@ -44,13 +44,13 @@ def signup(vars=None):
     :return: None on Success
     :rtype: None
     """
-    
+
     config = get_config_with_profile(vars or {})
     current_profile = config.get_current_profile_name()
-    
+
     print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
     time.sleep(3)
-    
+
     log.info('Signing up the user ' + vars['user_name'])
     u = user.User(vars['user_name'], config)
     password = get_password()
@@ -91,7 +91,7 @@ def login(vars=None):
     """
     # Determine which profile to use
     profile_to_use = vars.get('profile') if vars else None
-    
+
     if profile_to_use:
         # If a specific profile is requested, validate it exists
         try:
@@ -100,10 +100,10 @@ def login(vars=None):
                 print(f"❌ Profile '{profile_to_use}' does not exist.")
                 print("Use 'esp-rainmaker-cli profile list' to see available profiles.")
                 return
-            
+
             # Show which profile we're logging into
             print(f'Logging into profile: \033[1m\033[32m{profile_to_use}\033[0m\033[0m')
-            
+
             # Create a config with profile override for login
             config = configmanager.Config(profile_override=profile_to_use)
         except Exception as e:
@@ -114,17 +114,17 @@ def login(vars=None):
         config = configmanager.Config()
         current_profile = config.get_current_profile_name()
         print('Current selected profile is \033[1m\033[32m{}\033[0m\033[0m. If you wish to change this, use `profile switch` command.'.format(current_profile))
-    
+
     time.sleep(3)
 
     # Get the profile we're working with
     target_profile = profile_to_use if profile_to_use else config.get_current_profile_name()
-    
+
     # Check if this is a custom profile
     try:
         profile_config = config.profile_manager.get_profile_config(target_profile)
         is_custom_profile = not profile_config.get('builtin', False)
-        
+
         if is_custom_profile and not profile_config.get('ui_login_supported', False):
             # Custom profiles require --user_name and don't support UI login
             if not vars.get('user_name') and not vars.get('email'):
@@ -151,12 +151,17 @@ def login(vars=None):
 
         log.debug("User login status is active.")
 
-        # Print user details
-        print(f'\nUser login session found for profile {target_profile}.')
-        
+                # Print user details
+        try:
+            user_name_config = config.get_user_name()
+            print(f'\nUser login session found for profile {target_profile}.')
+            print(f'Currently logged in as: {user_name_config}')
+        except Exception:
+            print(f'\nUser login session found for profile {target_profile}.')
+
         user_input = input(
             f"Do you want to end the session and login again with a different user (Y/N)? :")
-        
+
         if user_input not in ["Y", "y"]:
             try:
                 user_name_config = config.get_user_name()
@@ -164,13 +169,13 @@ def login(vars=None):
             except Exception:
                 print(f"Session exists for profile '{target_profile}'.")
             return
-        
+
         config.remove_curr_login_creds()
         print("Previous login session ended successfully.")
 
     # Check if we have a password provided
     password = vars.get('password') if vars else None
-    
+
     if user_name and password:
         # Programmatic login with credentials
         try:
@@ -189,15 +194,15 @@ def login(vars=None):
         # Interactive login with username
         print(f"Performing interactive login for user: {user_name}")
         print("Password can also be set in environment variable: $ESP_RAINMAKER_PASSWORD")
-        
+
         password = os.getenv('ESP_RAINMAKER_PASSWORD')
         if not password:
             password = getpass.getpass("Please enter the password: ")
-        
+
         if not password:
             print("Password is required for login.")
             return
-        
+
         try:
             user_obj = user.User(user_name, config)
             session_obj = user_obj.login(password)
@@ -219,10 +224,10 @@ def login(vars=None):
 def logout(vars=None):
     """
     Logout current (logged-in) user
-    
+
     :param vars: Optional parameters including 'profile'
     :type vars: dict | None
-    
+
     :return: None on Success and Failure
     :rtype: None
     """
@@ -231,7 +236,7 @@ def logout(vars=None):
         curr_session = get_session_with_profile(vars or {})
         response = curr_session.logout()
         log.debug('Logout response: %s' % response)
-        
+
         # Remove current login creds for the profile being used
         config = get_config_with_profile(vars or {})
         config.remove_curr_login_creds()
@@ -360,7 +365,7 @@ def get_password():
 def get_user_details(vars=None):
     """
     Get details of current logged-in user
-    
+
     :param vars: Optional parameters including 'profile'
     :type vars: dict | None
     """
@@ -384,10 +389,10 @@ def get_user_details(vars=None):
 def set_configuration(vars=None):
     """
     Set Configuration - now only handles legacy region setting
-    
+
     :param vars: Configuration parameters
     :type vars: dict
-    
+
     :return: None on Success
     """
     if vars.get('region'):
@@ -424,7 +429,7 @@ def set_china_region(vars=None):
     Set China Region - maps to china profile
     """
     config = configmanager.Config()
-    
+
     try:
         # Switch to china profile
         config.switch_profile('china')
@@ -439,7 +444,7 @@ def set_global_region(vars=None):
     Set Global Region - maps to global profile
     """
     config = configmanager.Config()
-    
+
     try:
         # Switch to global profile
         config.switch_profile('global')
@@ -455,16 +460,16 @@ def switch_profile(vars=None):
     """
     profile_name = vars['profile']
     config = configmanager.Config()
-    
+
     try:
         if not config.profile_manager.profile_exists(profile_name):
             print(f"Profile '{profile_name}' does not exist.")
             print("Use 'profile list' to see available profiles.")
             return
-        
+
         config.switch_profile(profile_name)
         print(f"Switched to profile '{profile_name}'")
-        
+
     except Exception as e:
         log.error(f"Failed to switch profile: {e}")
 
@@ -475,18 +480,18 @@ def add_custom_profile(vars=None):
     profile_name = vars['add_profile']
     base_url = vars.get('base_url')
     description = vars.get('description')
-    
+
     if not base_url:
         log.error('Base URL is required for custom profiles. Use --base-url option.')
         sys.exit(1)
-    
+
     config = configmanager.Config()
-    
+
     try:
         config.profile_manager.create_custom_profile(profile_name, base_url, description)
         print(f"Created custom profile '{profile_name}' with base URL '{base_url}'")
         print(f"Note: Custom profiles require --user_name for login (UI login not supported)")
-        
+
     except ValueError as e:
         log.error(f"Failed to create profile: {e}")
         sys.exit(1)
@@ -500,17 +505,17 @@ def remove_custom_profile(vars=None):
     """
     profile_name = vars['remove_profile']
     config = configmanager.Config()
-    
+
     try:
         # Confirm before deletion
         confirmation = input(f"Are you sure you want to delete profile '{profile_name}'? (y/N): ")
         if confirmation.lower() not in ['y', 'yes']:
             print("Profile deletion cancelled.")
             return
-        
+
         config.profile_manager.delete_custom_profile(profile_name)
         print(f"Deleted custom profile '{profile_name}'")
-        
+
     except ValueError as e:
         log.error(f"Failed to delete profile: {e}")
     except Exception as e:
@@ -522,32 +527,32 @@ def list_profiles(vars=None):
     """
     config = configmanager.Config()
     current_profile = config.get_current_profile_name()
-    
+
     try:
         profiles = config.profile_manager.list_profiles()
-        
+
         print("Available profiles:")
         print("-" * 50)
-        
+
         for profile_name, profile_config in profiles.items():
             is_current = " (current)" if profile_name == current_profile else ""
             profile_type = "builtin" if profile_config.get('builtin', False) else "custom"
-            
+
             print(f"  {profile_name}{is_current}")
             print(f"    Type: {profile_type}")
             print(f"    Description: {profile_config.get('description', 'N/A')}")
-            
+
             if profile_config.get('host'):
                 print(f"    Host: {profile_config['host']}")
-            
+
             # Check if user is logged in to this profile
             if config.profile_manager.has_profile_tokens(profile_name):
                 print(f"    Status: Logged in")
             else:
                 print(f"    Status: Not logged in")
-            
+
             print()
-        
+
     except Exception as e:
         log.error(f"Failed to list profiles: {e}")
 
@@ -557,16 +562,16 @@ def show_current_profile(vars=None):
     """
     config = configmanager.Config()
     current_profile = config.get_current_profile_name()
-    
+
     try:
         profile_config = config.profile_manager.get_profile_config(current_profile)
         is_builtin = profile_config.get('builtin', False)
-        
+
         print(f"Current profile: {current_profile}")
         print(f"Type: {'builtin' if is_builtin else 'custom'}")
         print(f"Description: {profile_config.get('description', 'N/A')}")
         print(f"Host: {config.get_host()}")
-        
+
         # Check login status
         if config.profile_manager.has_profile_tokens(current_profile):
             try:
@@ -576,7 +581,7 @@ def show_current_profile(vars=None):
                 print(f"Login status: Logged in")
         else:
             print(f"Login status: Not logged in")
-        
+
     except Exception as e:
         log.error(f"Failed to get profile information: {e}")
 
@@ -615,10 +620,10 @@ def profile_remove(vars=None):
 def set_region_configuration(vars=None):
     """
     Set Region Configuration
-    
+
     :param vars: Configuration parameters
     :type vars: dict
-    
+
     :return: None on Success
     """
     if vars.get('region'):
@@ -634,3 +639,103 @@ def set_region_configuration(vars=None):
         log.error('No region specified. Valid regions: china, global.')
         sys.exit(1)
     return
+
+def delete_user(vars=None):
+    """
+    Delete current user account from ESP RainMaker.
+    This is a two-step process with confirmation at each step.
+
+    :param vars: Optional parameters including 'profile'
+    :type vars: dict | None
+
+    :return: None on Success and Failure
+    :rtype: None
+    """
+    try:
+        log.debug('Initiating user deletion process')
+
+        # Get current session and user info
+        curr_session = get_session_with_profile(vars or {})
+        config = get_config_with_profile(vars or {})
+
+        # Get current user name if possible
+        try:
+            current_user = config.get_user_name()
+        except Exception:
+            current_user = "current user"
+
+        # Step 1: Show warning and get initial confirmation
+        print("\n" + "="*60)
+        print("⚠️  WARNING: USER ACCOUNT DELETION")
+        print("="*60)
+        print("This action will PERMANENTLY DELETE your ESP RainMaker account.")
+        print("The following data will be PERMANENTLY REMOVED:")
+        print("  • All your nodes and devices")
+        print("  • All device groups")
+        print("  • All schedules and automations")
+        print("  • All sharing settings")
+        print("  • All user data and preferences")
+        print("  • Your account login credentials")
+        print("\n⚠️  THIS ACTION CANNOT BE UNDONE!")
+        print("="*60)
+
+        confirmation = input(f"\nAre you absolutely sure you want to delete {current_user} (Y/N)? :")
+        if confirmation.lower() not in ['y', 'yes']:
+            print("User deletion cancelled.")
+            return
+
+        # Step 2: Initiate deletion request
+        print("\nInitiating account deletion request...")
+
+        try:
+            # First API call - request deletion
+            curr_session.delete_user(request=True)
+            print(f"✅ Deletion request sent successfully!")
+            print(f"📧 A verification code has been sent to your email: {current_user}")
+
+        except Exception as delete_err:
+            log.error(f"Failed to initiate user deletion: {delete_err}")
+            return
+
+        # Step 3: Get verification code
+        print("\n" + "-"*50)
+        verification_code = input("Please enter the verification code from your email: ")
+
+        if not verification_code.strip():
+            print("No verification code provided. User deletion cancelled.")
+            return
+
+        # Step 4: Final confirmation
+        print("\n" + "="*60)
+        print("🔴 FINAL CONFIRMATION")
+        print("="*60)
+        print("You are about to PERMANENTLY DELETE your account!")
+        print("This will remove ALL data associated with your account.")
+        print("="*60)
+
+        final_confirmation = input("Type 'DELETE' to confirm permanent account deletion: ")
+        if final_confirmation != 'DELETE':
+            print("Final confirmation failed. User deletion cancelled.")
+            return
+
+        # Step 5: Execute deletion with verification code
+        print("\nExecuting account deletion...")
+        try:
+            curr_session.delete_user(verification_code=verification_code.strip())
+
+            # Remove local credentials
+            config.remove_curr_login_creds()
+
+            print("✅ User account deleted successfully.")
+            print("Your ESP RainMaker account and all associated data have been permanently removed.")
+            print("Thank you for using ESP RainMaker.")
+
+        except Exception as delete_err:
+            log.error(f"Failed to delete user account: {delete_err}")
+            print("❌ Failed to delete user account. Please try again or contact support.")
+            return
+
+    except Exception as err:
+        log.error(f"Error during user deletion process: {err}")
+        print("❌ An error occurred during the deletion process.")
+        return

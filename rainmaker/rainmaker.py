@@ -9,7 +9,7 @@ import argparse
 from rmaker_cmd.node import *
 from rmaker_cmd.user import signup, login, forgot_password,\
                             get_user_details, logout, set_region_configuration, \
-                            profile_list, profile_current, profile_switch, profile_add, profile_remove
+                            profile_list, profile_current, profile_switch, profile_add, profile_remove, delete_user
 from rmaker_cmd.cmd_response import get_cmd_requests, create_cmd_request
 from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
@@ -350,6 +350,15 @@ def main():
                                          help="Get details of current (logged-in) user")
     add_profile_argument(user_info_parser)
     user_info_parser.set_defaults(func=get_user_details)
+
+    delete_user_parser = subparsers.add_parser("deleteuser",
+                                              help="Delete current user account permanently",
+                                              description="Delete current user account from ESP RainMaker.\n"
+                                                        "⚠️  WARNING: This action will permanently delete your account\n"
+                                                        "and ALL associated data including devices, groups, and settings.\n"
+                                                        "This action cannot be undone!")
+    add_profile_argument(delete_user_parser)
+    delete_user_parser.set_defaults(func=delete_user)
 
     # Node Sharing
     sharing_parser = subparsers.add_parser('sharing',
