@@ -25,7 +25,6 @@ except ImportError as err:
     print("Failed to import ESP Rainmaker library. " + str(err))
     raise err
 
-from rmaker_cmd.browserlogin import browser_login
 from rmaker_lib.profile_utils import get_session_with_profile, get_config_with_profile
 
 MAX_PASSWORD_CHANGE_ATTEMPTS = 3
@@ -218,6 +217,7 @@ def login(vars=None):
         # Browser-based login
         log.info("Starting browser login flow")
         print('Secure browser login')
+        from rmaker_cmd.browserlogin import browser_login
         browser_login(config)
 
 

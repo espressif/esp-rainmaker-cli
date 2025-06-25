@@ -9,7 +9,18 @@ from oauth2client import _helpers
 from six.moves import BaseHTTPServer, http_client, urllib
 import os
 import sys
-import pkg_resources
+
+# Modern resource handling with fallback for older Python versions
+try:
+    # Python 3.9+
+    from importlib import resources
+except ImportError:
+    try:
+        # Python 3.7-3.8
+        import importlib_resources as resources
+    except ImportError:
+        # Fallback to pkg_resources for very old setups
+        import pkg_resources
 
 try:
     from rmaker_lib import configmanager
@@ -54,7 +65,24 @@ class HttpdRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         parts = urllib.parse.urlparse(self.path)
         query = _helpers.parse_unique_urlencoded(parts.query)
         self.server.query_params = query
-        index_file = pkg_resources.resource_filename('rmaker_cmd', 'html/welcome.html')
+        # Get the path to the HTML file using modern resource handling
+        try:
+            # Modern approach (Python 3.9+)
+            if 'resources' in globals():
+                try:
+                    # Try importlib.resources first
+                    html_files = resources.files('rmaker_cmd') / 'html'
+                    index_file = str(html_files / 'welcome.html')
+                except (AttributeError, TypeError):
+                    # Fallback for older importlib.resources versions
+                    with resources.path('rmaker_cmd.html', 'welcome.html') as p:
+                        index_file = str(p)
+            else:
+                # Fallback to pkg_resources
+                index_file = pkg_resources.resource_filename('rmaker_cmd', 'html/welcome.html')
+        except Exception:
+            # Final fallback to pkg_resources
+            index_file = pkg_resources.resource_filename('rmaker_cmd', 'html/welcome.html')
 
         try:
             with open(index_file, 'rb') as home_page:

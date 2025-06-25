@@ -2,6 +2,13 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+ ## [1.5.3] - 26-Jun-2025
+ ### Added
+ - New `deleteuser` command for permanent account deletion with two-step verification
+ ### Fixed
+ - login command was not displaying currently logged-in user when session exists
+ - login, signup, forgotpassword commands were giving deprecation warning for pkg_resources
+
 ## [1.5.2] - 23-Jun-2025
 ### Fixed
 - `requirement`: bump esp-idf-nvs-partition-gen to v0.1.9
