@@ -564,3 +564,80 @@ class Session:
         except Exception as e:
             log.error(f'Failed to list nodes in group: {e}')
             raise
+
+    def delete_user(self, request=False, verification_code=None):
+        """
+        Delete current user account from ESP RainMaker.
+        This is a two-step process:
+        1. First call with request=True to initiate deletion and receive verification code
+        2. Second call with verification_code to confirm deletion
+
+        :param request: If True, initiates deletion request and sends verification code to email
+        :type request: bool
+
+        :param verification_code: Verification code received via email for confirming deletion
+        :type verification_code: str
+
+        :raises SSLError: If there is an SSL issue
+        :raises HTTPError: If the HTTP response is an HTTPError
+        :raises NetworkError: If there is a network connection issue
+        :raises Timeout: If there is a timeout issue
+        :raises RequestException: If there is an issue during
+                                  the HTTP request
+        :raises Exception: If there is an HTTP issue during user deletion
+
+        :return: True on Success
+        :rtype: bool
+        """
+        socket.setdefaulttimeout(10)
+        log.info("Delete user request for current logged-in user")
+        path = 'user2'
+
+        # Build query parameters
+        query_params = []
+        if request:
+            query_params.append('request=true')
+        if verification_code:
+            query_params.append(f'verification_code={verification_code}')
+
+        delete_user_url = self.config.get_host() + path
+        if query_params:
+            delete_user_url += '?' + '&'.join(query_params)
+
+        # No request body needed for delete user API
+        delete_user_info = {}
+
+        try:
+            log.debug("Delete user request url : " + delete_user_url)
+            log.debug("Delete user request data : " + json.dumps(delete_user_info))
+            log.debug("Delete user request headers : " + str(self.request_header))
+
+            response = requests.delete(url=delete_user_url,
+                                      headers=self.request_header,
+                                      verify=configmanager.CERT_FILE,
+                                      timeout=(5.0, 5.0))
+
+            log.debug("Delete user response : " + response.text)
+            response.raise_for_status()
+
+        except requests.exceptions.HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
+        except requests.exceptions.SSLError:
+            raise SSLError
+        except requests.exceptions.ConnectionError:
+            raise NetworkError
+        except requests.exceptions.Timeout as time_err:
+            log.debug(time_err)
+            raise RequestTimeoutError
+        except requests.exceptions.RequestException as req_err:
+            log.debug(req_err)
+            raise req_err
+        except Exception:
+            raise Exception(response.text)
+
+        if request:
+            log.info("Delete user request sent successfully. Verification code sent to email.")
+        else:
+            log.info("User deleted successfully.")
+        return True

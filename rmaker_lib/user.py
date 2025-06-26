@@ -21,7 +21,7 @@ class User:
     def __init__(self, username, config=None):
         """
         Instantiate user with username.
-        
+
         :param username: Name of User
         :type username: str
         :param config: Configuration object to use, defaults to None
