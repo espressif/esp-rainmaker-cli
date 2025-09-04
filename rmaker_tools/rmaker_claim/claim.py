@@ -24,7 +24,7 @@ import requests
 import json
 import binascii
 from types import SimpleNamespace
-from rmaker_lib.constants import DOT_CRT, DOT_CSV, DOT_INFO, DOT_KEY, ENDPOINT, NODE, NODE_INFO, HOST
+from rmaker_lib.constants import DOT_CRT, DOT_CSV, DOT_INFO, DOT_KEY, ENDPOINT, NODE, NODE_INFO, HOST, MQTT_CRED_HOST_FILENAME
 from rmaker_lib.logger import log
 from cryptography import x509
 from cryptography.x509.oid import NameOID
@@ -216,7 +216,7 @@ def convert_private_key_from_pem_to_der(pem_file, out_der_file):
     with open(out_der_file, 'wb') as f:
         f.write(der_key)
 
-def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo, node_info_csv):
+def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo, node_info_csv, mqtt_cred_host=None):
     """
     Create files with claiming details
 
@@ -235,12 +235,12 @@ def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo,
     :param endpointinfo: MQTT endpoint (data) to write to `endpoint.info` file
     :type endpointinfo: str
 
-    :param hex_str: random hex string
-    :type hex_str: str
-
     :param node_info_csv: List of output csv file details (node information)
                           to write to `node_info.csv` file
     :type node_info_csv: list
+
+    :param mqtt_cred_host: MQTT credential host (data) to write to `mqtt_cred_host.info` file
+    :type mqtt_cred_host: str
 
     :raises Exception: If there is any issue when writing to file
 
@@ -274,6 +274,13 @@ def save_claim_data(dest_filedir, node_id, private_key, node_cert, endpointinfo,
         with open(dest_filedir + ENDPOINT + DOT_INFO, 'w+') as info_file:
             info_file.write(endpointinfo)
 
+        # Write MQTT credential host if available
+        if mqtt_cred_host:
+            log.debug("Writing MQTT credential host at location: " +
+                      dest_filedir + MQTT_CRED_HOST_FILENAME + DOT_INFO)
+            with open(dest_filedir + MQTT_CRED_HOST_FILENAME + DOT_INFO, 'w+') as info_file:
+                info_file.write(mqtt_cred_host)
+
         log.debug("Writing node info at location: " +
                   dest_filedir + NODE_INFO + DOT_CSV)
 
@@ -300,7 +307,7 @@ def gen_nvs_partition_bin(dest_filedir, output_bin_filename):
     nvs_partition_gen.generate(nvs_args)
 
 
-def set_claim_verify_data(claim_init_resp, private_key, matter):
+def set_claim_verify_data(claim_init_resp, private_key, matter, node_type=None):
     # Generate CSR with common_name=node_id received in response
     node_id = str(json.loads(
         claim_init_resp.text)['node_id'])
@@ -322,6 +329,13 @@ def set_claim_verify_data(claim_init_resp, private_key, matter):
         raise Exception("CSR Not Generated. Claiming Failed")
     log.info("CSR generated")
     claim_verify_data = {"csr": csr}
+    
+    # Add node_policies if provided
+    match node_type:
+        case "camera":
+            claim_verify_data["node_policies"] = "videostream"
+            log.info("Node policies added: " + str(claim_verify_data["node_policies"]))
+
     # Save node id as node info to use while saving claim data
     # in csv file
     node_info = node_id
@@ -397,7 +411,7 @@ def claim_initiate(claim_init_data, header=None):
         exit(0)
 
 
-def start_claim_process(mac_addr, node_platform, private_key, matter=False):
+def start_claim_process(mac_addr, node_platform, private_key, matter=False, node_type=None):
     log.info("Creating session")
     try:
         # Set claim initiate data
@@ -407,13 +421,15 @@ def start_claim_process(mac_addr, node_platform, private_key, matter=False):
         claim_init_resp = claim_initiate(claim_init_data)
 
         # Set claim verify data
-        claim_verify_data, node_info = set_claim_verify_data(claim_init_resp, private_key, matter)
+        claim_verify_data, node_info = set_claim_verify_data(claim_init_resp, private_key, matter, node_type)
 
         # Perform claim verify request
         claim_verify_resp = claim_verify(claim_verify_data, matter)
 
         # Get certificate from claim verify response
         node_cert = json.loads(claim_verify_resp.text)['certificate']
+        #TODO: Get MQTT hosts from claim verify response?
+        
         print("Claim certificate received")
         log.info("Claim certificate received")
 
@@ -487,13 +503,13 @@ def create_config_dir():
 
 
 def get_mqtt_endpoint():
-    # Get MQTT endpoint directly from session
-    log.info("Getting MQTT Host")
+    # Get MQTT endpoint and credential host directly from API
+    log.info("Getting MQTT Host and Credential Host")
     from rmaker_lib.session import Session
     s = Session()
-    endpointinfo = s.get_mqtt_host()
-    log.debug("Endpoint info received: " + str(endpointinfo))
-    return endpointinfo
+    endpointinfo, creds_endpointinfo = s.get_mqtt_host()
+    log.debug("Endpoint info received: " + str(endpointinfo) +" , credentials endpoint:"+str(creds_endpointinfo))
+    return endpointinfo, creds_endpointinfo
 
 
 def verify_claim_data_binary_exists(userid, mac_addr, dest_filedir, output_bin_filename):
@@ -562,6 +578,8 @@ def set_csv_file_data(dest_filedir):
         dest_filedir + 'node.info',
         'mqtt_host,file,binary,' +
         dest_filedir + 'endpoint.info',
+        'mqtt_cred_host,file,binary,' +
+        dest_filedir + 'mqtt_cred_host.info',
         'client_cert,file,binary,' +
         dest_filedir + 'node.crt',
         'client_key,file,binary,' +
@@ -669,7 +687,7 @@ def gen_esp_secure_cert_partition_bin(path, esp_secure_cert_file_name, node_plat
     tlv_priv_key = tlv_priv_key_t(tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, os.path.join(path, 'device_key.der'), None)
     generate_partition_no_ds(tlv_priv_key, os.path.join(path, 'device_cert.der'), os.path.join(path, 'ca_cert.der'), node_platform, os.path.join(path, esp_secure_cert_file_name))
 
-def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False, out_dir=None):
+def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False, out_dir=None, node_type=None):
     """
     Claim the node connected to the given serial port
     (Get cloud credentials)
@@ -682,6 +700,15 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
 
     :param flash_address: Flash Address
     :type flash_address: str
+
+    :param matter: Use Matter claiming
+    :type matter: bool
+
+    :param out_dir: Output directory for claim files
+    :type out_dir: str
+
+    :param node_type: Node type to apply (e.g., "camera")
+    :type node_type: str
 
     :raises Exception: If there is an HTTP issue while claiming
             SSLError: If there is an issue in SSL certificate validation
@@ -759,16 +786,22 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
         print("\nClaiming process started. This may take time.")
         log.info("Claiming process started. This may take time.")
 
-        # Start claim process
-        node_info, node_cert = start_claim_process(mac_addr, node_platform, private_key, matter)
 
-        # Get MQTT endpoint
-        endpointinfo = get_mqtt_endpoint()
+        # Get MQTT endpoint and credential host from API
+        endpointinfo, creds_endpointinfo = get_mqtt_endpoint()
+        
+        # Validate if creds_endpointinfo is not empty and if type is camera, else error
+        if node_type == 'camera':
+            if not creds_endpointinfo:
+                log.error("Credential endpoint information is required for camera type nodes")
+                sys.exit("Credential endpoint information is required for camera type nodes")
+
+        # Start claim process
+        node_info, node_cert = start_claim_process(mac_addr, node_platform, private_key, matter, node_type)
 
         # Create output claim files
-
         # TODO: Use node-id and node-cert
-        save_claim_data(dest_filedir, node_info, private_key_bytes, node_cert, endpointinfo, node_info_csv)
+        save_claim_data(dest_filedir, node_info, private_key_bytes, node_cert, endpointinfo, node_info_csv, creds_endpointinfo)
 
         print("Claiming done")
         log.info("Claiming done")

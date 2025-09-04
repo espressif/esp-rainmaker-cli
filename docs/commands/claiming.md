@@ -24,6 +24,7 @@ Options:
 - `--addr`: Flash address where claim data will be written (default: 0x340000)
 - `--outdir`: Directory to store claim files
 - `--matter`: Use Matter claiming (for Matter-enabled devices)
+- `--type`: Special RainMaker Node type (e.g., "camera" for camera devices)
 
 Example:
 ```bash
@@ -100,6 +101,19 @@ For Matter-enabled devices:
 ```bash
 esp-rainmaker-cli claim /dev/ttyUSB0 --matter
 ```
+
+### Camera Device Claiming
+
+For camera devices that require video streaming capabilities:
+
+```bash
+esp-rainmaker-cli claim /dev/ttyUSB0 --type camera
+```
+
+This will:
+- Automatically apply the standard MQTT policy for basic device communication
+- Automatically apply the videostream policy for camera-specific features
+- Enable video streaming capabilities for the device
 
 ## Troubleshooting
 
