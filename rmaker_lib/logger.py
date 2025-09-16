@@ -8,7 +8,8 @@ from logging import handlers
 from datetime import datetime
 
 log_base_path = os.path.dirname(os.path.dirname(__file__))
-log_dir_path = os.path.join(log_base_path, 'logs')
+# Use environment variable for log directory if available (for Lambda compatibility)
+log_dir_path = os.environ.get('RMAKER_CLI_LOG_DIR', os.path.join(log_base_path, 'logs'))
 
 if not os.path.exists(log_dir_path):
     os.makedirs(log_dir_path, exist_ok=True)
