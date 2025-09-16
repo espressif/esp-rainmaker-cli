@@ -16,12 +16,45 @@ class Session:
     """
     Session class for logged in user.
     """
-    def __init__(self, profile_override=None):
+    def __init__(self, profile_override=None, access_token=None, base_url=None):
         """
         Instantiate session for logged in user.
 
         :param profile_override: Optional profile name to use instead of current profile.
+        :param access_token: Optional access token for direct authentication (bypasses local config).
+        :param base_url: Optional base URL for API calls (used with access_token).
         """
+        # Handle token-based authentication (for MCP servers, etc.)
+        if access_token:
+            log.info("Initialising session with provided access token")
+            self.id_token = access_token
+            self.request_header = {'Content-Type': 'application/json',
+                                   'Authorization': self.id_token}
+
+            # Set up minimal config for token-based sessions
+            if base_url:
+                # Create a minimal config that uses the provided base URL
+                class TokenConfig:
+                    def __init__(self, base_url):
+                        # Ensure base_url ends with / for proper path joining
+                        self._base_url = base_url.rstrip('/') + '/'
+
+                    def get_host(self):
+                        return self._base_url
+
+                    def get_region(self):
+                        return 'custom'
+
+                    def get_current_profile_name(self):
+                        return 'token-based'
+
+                self.config = TokenConfig(base_url)
+            else:
+                # Use default config but don't require login
+                self.config = configmanager.Config(profile_override=profile_override)
+            return
+
+        # Original local authentication logic
         self.config = configmanager.Config(profile_override=profile_override)
         log.info("Initialising session for user")
 
