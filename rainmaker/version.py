@@ -5,4 +5,4 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # This file contains the version information for the ESP RainMaker CLI
-VERSION = "1.5.3"
+VERSION = "1.5.4"

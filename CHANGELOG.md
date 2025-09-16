@@ -2,10 +2,15 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
- ## [1.5.3] - 26-Jun-2025
- ### Added
+## [1.5.4] - 16-Sep-2025
+### Added
+- Support for changing logs path
+- Support for passing access token externally
+
+## [1.5.3] - 26-Jun-2025
+### Added
  - New `deleteuser` command for permanent account deletion with two-step verification
- ### Fixed
+### Fixed
  - login command was not displaying currently logged-in user when session exists
  - login, signup, forgotpassword commands were giving deprecation warning for pkg_resources
 
