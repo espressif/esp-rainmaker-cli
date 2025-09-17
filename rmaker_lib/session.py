@@ -287,7 +287,7 @@ class Session:
 
     def get_mqtt_host(self):
         """
-        Get the MQTT Host endpoint.
+        Get the MQTT Host endpoint and MQTT Credential Host endpoint.
 
         :raises NetworkError: If there is a network connection issue
                               while getting MQTT Host endpoint
@@ -297,7 +297,7 @@ class Session:
         :return: MQTT Host on Success, None on Failure
         :rtype: str | None
         """
-        log.info("Getting MQTT Host endpoint.")
+        log.info("Getting MQTT Host endpoint and MQTT Credential Host endpoint.")
         path = 'mqtt_host'
         request_url = self.config.get_host().split(serverconfig.VERSION)[0] + path
         try:
@@ -324,7 +324,8 @@ class Session:
 
         if 'mqtt_host' in response:
             log.info("Received MQTT Host endpoint successfully.")
-            return response['mqtt_host']
+            mqtt_cred_host = response.get('mqtt_cred_host')
+            return response['mqtt_host'], mqtt_cred_host
         return None
 
     def get_user_details(self):

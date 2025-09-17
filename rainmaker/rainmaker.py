@@ -321,6 +321,10 @@ def main():
                               type=str,
                               help='Directory to store the claim files.\nThe outdir can be specified using the environment variable RM_CLI_OUT_DIR as well.\nDefault: ~/.espressif/rainmaker/claim_data/')
 
+    claim_parser.add_argument("--type", metavar='<type>',
+                              type=str,
+                              help='Special RainMaker Node type (e.g., "camera").')
+
     add_profile_argument(claim_parser)
     claim_parser.set_defaults(func=claim_node, parser=claim_parser)
 

@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.6.0] - 16-Sep-2025
+### Added
+- Support for camera device type in claiming
+
 ## [1.5.4] - 16-Sep-2025
 ### Added
 - Support for changing logs path

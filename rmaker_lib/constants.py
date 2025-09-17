@@ -5,6 +5,7 @@
 # Filename
 NODE = 'node'
 ENDPOINT = 'endpoint'
+MQTT_CRED_HOST_FILENAME = "mqtt_cred_host"
 NODE_INFO = 'node_info'
 
 # File Extensions
