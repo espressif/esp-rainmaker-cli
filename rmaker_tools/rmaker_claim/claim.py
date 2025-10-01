@@ -356,8 +356,7 @@ def claim_verify(claim_verify_data, matter=False, header=None):
     claim_verify_url = claim_config_get_verify_url()
     claim_verify_enc_data = str(claim_verify_data).replace(
         "'", '"')
-    # TODO: Remove the 'test' param after claiming API deprecates it
-    params = {"matter": matter, "test": True}
+    params = {"matter": matter}
     log.debug("Claim Verify POST Request: url: " + claim_verify_url +
               " data: " + str(claim_verify_enc_data) + " headers: " +
               str(header) + " params: " + str(params) + " verify: " + CERT_FILE)
