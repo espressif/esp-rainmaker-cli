@@ -22,12 +22,25 @@ import sys
 import json
 from getpass import getpass
 
+# Try relative imports first (when used as a package)
 try:
-    import security
-    import transport
-    import prov
-except ImportError as err:
-    raise err
+    from ...common import security
+    from ...common import transport
+    from ...common import prov
+except ImportError:
+    # Fallback: try absolute imports (for pip-installed packages)
+    try:
+        from rmaker_tools.common import security
+        from rmaker_tools.common import transport
+        from rmaker_tools.common import prov
+    except ImportError:
+        # Last resort: use local modules if they exist (backward compatibility)
+        current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if current_dir not in sys.path:
+            sys.path.insert(0, current_dir)
+        import security
+        import transport
+        import prov
 
 # Set this to true to allow exceptions to be thrown
 config_throw_except = True
@@ -38,17 +51,42 @@ def on_except(err):
     else:
         print(err)
 
-def get_security(secver, pop=None, verbose=False):
+def get_security(secver, sec_patch_ver=0, username='', password='', pop=None, verbose=False):
     """
     Get Security based on input parameters
-    `secver`: Security Version (Security0/Security1)
-    `pop`: Proof Of Possession
+    `secver`: Security Version (Security0/Security1/Security2)
+    `sec_patch_ver`: Security patch version for Security2
+    `username`: Username for Security2
+    `password`: Password for Security2  
+    `pop`: Proof Of Possession for Security1
     """
-    if secver == 1:
+    # Ensure pop is always a string (not None) to avoid len() errors in Security1
+    if pop is None:
+        pop = ''
+    
+    if secver == 2:
+        return security.Security2(sec_patch_ver, username, password, verbose)
+    elif secver == 1:
         return security.Security1(pop, verbose)
     elif secver == 0:
         return security.Security0(verbose)
     return None
+
+def get_sec_patch_ver(tp, verbose=False):
+    """
+    Get security patch version from device
+    """
+    try:
+        response = tp.send_data('proto-ver', '---')
+        if verbose:
+            print('proto-ver response : ', response)
+        try:
+            info = json.loads(response)
+            return info['prov'].get('sec_patch_ver', 0)
+        except ValueError:
+            return 0
+    except Exception:
+        return 0
 
 def get_transport(sel_transport, service_name):
     """
@@ -63,8 +101,6 @@ def get_transport(sel_transport, service_name):
                 service_name = '192.168.4.1:80'
             tp = transport.Transport_HTTP(service_name)
         elif (sel_transport == 'ble'):
-            if service_name is None:
-                raise RuntimeError('"--service_name" must be specified for ble transport')
             # BLE client is now capable of automatically figuring out
             # the primary service from the advertisement data and the
             # characteristics corresponding to each endpoint.
@@ -73,9 +109,64 @@ def get_transport(sel_transport, service_name):
             # in which case, the automated discovery will fail and the client
             # will fallback to using the provided UUIDs instead
             nu_lookup = {'prov-session': 'ff51', 'prov-config': 'ff52', 'proto-ver': 'ff53'}
-            tp = transport.Transport_BLE(devname=service_name,
-                                         service_uuid='0000ffff-0000-1000-8000-00805f9b34fb',
-                                         nu_lookup=nu_lookup)
+# Debug info removed for cleaner output
+            
+            # Check if this is the ESP-IDF version or our version
+            import inspect
+            import asyncio
+            sig = inspect.signature(transport.Transport_BLE.__init__)
+            if len(sig.parameters) == 3:  # self, service_uuid, nu_lookup
+                ble_transport = transport.Transport_BLE(service_uuid='0000ffff-0000-1000-8000-00805f9b34fb',
+                                                        nu_lookup=nu_lookup)
+                
+                # Create sync wrapper for async transport
+                class SyncBLETransport:
+                    def __init__(self, async_transport, device_name):
+                        self.async_transport = async_transport
+                        self.device_name = device_name
+                        self.loop = None
+                        self._connect()
+                    
+                    def _connect(self):
+                        # Connect to the BLE device
+                        async def connect():
+                            await self.async_transport.connect(self.device_name)
+                        
+                        self.loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(self.loop)
+                        self.loop.run_until_complete(connect())
+                    
+                    def send_data(self, ep_name, data):
+                        # Sync wrapper for async send_data
+                        async def send():
+                            return await self.async_transport.send_data(ep_name, data)
+                        
+                        if self.loop is None:
+                            self.loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(self.loop)
+                        
+                        return self.loop.run_until_complete(send())
+                    
+                    def disconnect(self):
+                        # Sync wrapper for async disconnect
+                        if self.loop is not None:
+                            async def disconnect():
+                                await self.async_transport.disconnect()
+                            self.loop.run_until_complete(disconnect())
+                            self.loop.close()
+                            self.loop = None
+                    
+                    def __del__(self):
+                        try:
+                            self.disconnect()
+                        except:
+                            pass
+                
+                tp = SyncBLETransport(ble_transport, service_name)
+            else:  # Our version with name parameter
+                tp = transport.Transport_BLE(service_uuid='0000ffff-0000-1000-8000-00805f9b34fb',
+                                             nu_lookup=nu_lookup,
+                                             name=service_name)
         elif (sel_transport == 'console'):
             tp = transport.Transport_Console()
         return tp

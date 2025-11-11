@@ -12,5 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .security0 import *  # noqa: F403, F401
-from .security1 import *  # noqa: F403, F401
+# Import shared security modules from common
+try:
+    from ...common.security.security0 import *  # noqa: F403, F401
+    from ...common.security.security1 import *  # noqa: F403, F401
+    from ...common.security.security2 import *  # noqa: F403, F401
+except ImportError:
+    # Fallback for pip-installed packages
+    from rmaker_tools.common.security.security0 import *  # noqa: F403, F401
+    from rmaker_tools.common.security.security1 import *  # noqa: F403, F401
+    from rmaker_tools.common.security.security2 import *  # noqa: F403, F401

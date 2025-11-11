@@ -2,6 +2,13 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.7.0] - 11-Nov-2025
+### Added
+- BLE Transport support for provisioning
+- Challenge-response based user-node mapping
+- Local control over HTTP
+- Security v2 for provisioning and local control
+
 ## [1.6.0] - 16-Sep-2025
 ### Added
 - Support for camera device type in claiming

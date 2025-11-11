@@ -15,6 +15,7 @@
 from __future__ import print_function
 from builtins import input
 import argparse
+import json
 import textwrap
 import time
 import os
@@ -23,12 +24,35 @@ from getpass import getpass
 
 
 try:
-    prov_path = os.path.dirname(__file__)
-    sys.path.insert(0, prov_path)
-    import prov.user_mapping as cloud_config_prov
-    import prov.prov_util as esp_prov
-except ImportError as err:
-    raise err
+    # Use proper package imports
+    from .prov import user_mapping as cloud_config_prov
+    from .prov import prov_util as esp_prov
+    from . import challenge_response
+except ImportError:
+    # Fallback: Direct imports using full module path
+    current_dir = os.path.dirname(__file__)
+    sys.path.insert(0, current_dir)
+    
+    # Import using importlib for better control
+    import importlib.util
+    
+    # Import user_mapping
+    user_mapping_path = os.path.join(current_dir, 'prov', 'user_mapping.py')
+    spec = importlib.util.spec_from_file_location("user_mapping", user_mapping_path)
+    cloud_config_prov = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cloud_config_prov)
+    
+    # Import prov_util
+    prov_util_path = os.path.join(current_dir, 'prov', 'prov_util.py')
+    spec = importlib.util.spec_from_file_location("prov_util", prov_util_path)
+    esp_prov = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(esp_prov)
+    
+    # Import challenge_response
+    challenge_response_path = os.path.join(current_dir, 'challenge_response.py')
+    spec = importlib.util.spec_from_file_location("challenge_response", challenge_response_path)
+    challenge_response = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(challenge_response)
 
 # Set this to true to allow exceptions to be thrown
 config_throw_except = True
@@ -128,7 +152,8 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
 
 
 def provision_device(transport_mode, pop, userid, secretkey,
-                     ssid=None, passphrase=None):
+                     ssid=None, passphrase=None, security_version=None,
+                     sec2_username='', sec2_password='', device_name=None, session=None):
     """
     Wi-Fi Provision a device
 
@@ -158,32 +183,88 @@ def provision_device(transport_mode, pop, userid, secretkey,
         defaults to 'None'
     :type passphrase: str, optional
 
+    :param security_version: Security version (0, 1, or 2). If None, 
+                            auto-detected from device capabilities.
+    :type security_version: int, optional
+
+    :param sec2_username: Username for Security 2 (SRP6a)
+    :type sec2_username: str, optional
+
+    :param sec2_password: Password for Security 2 (SRP6a)
+    :type sec2_password: str, optional
+
+    :param device_name: Device name for BLE transport (e.g., PROV_d76c30)
+    :type device_name: str, optional
+
+    :param session: Authenticated session object for challenge-response
+    :type session: object, optional
+
     :return: nodeid (Node Identifier) on Success, None on Failure
     :rtype: str | None
     """
-    security_version = 1  # this utility should run with Security1
-    service_name = None  # will use default (192.168.4.1:80)
+    # Ensure pop is always a string (not None) to avoid len() errors
+    if pop is None:
+        pop = ''
+    
+    # Set service name based on transport mode
+    if transport_mode.lower() == 'ble':
+        service_name = device_name  # Use device name for BLE
+    else:
+        service_name = None  # Use default for SoftAP (192.168.4.1:80)
 
     obj_transport = esp_prov.get_transport(transport_mode, service_name)
     if obj_transport is None:
         print("Establishing connection to node - Failed")
         return None
 
-    # First check if capabilities are supported or not
-    if not esp_prov.has_capability(obj_transport):
-        print('Security capabilities could not be determined.')
-        return None
+    # Auto-detect security version if not specified
+    if security_version is None:
+        # First check if capabilities are supported or not
+        if not esp_prov.has_capability(obj_transport):
+            print('Security capabilities could not be determined, defaulting to Security 1')
+            security_version = 1
+        else:
+            # When no_sec is present, use security 0, else security 1
+            security_version = int(not esp_prov.has_capability(obj_transport, 'no_sec'))
+        print(f'==== Auto-detected Security Scheme: {security_version} ====')
 
-    # Ensure no_pop capability is not supported for Security Version1
-    if not esp_prov.has_capability(obj_transport, 'no_pop'):
-        if len(pop) == 0:
-            print("Proof of Possession argument not provided")
-            return None
-    else:
-        print("Invalid: no_pop capability is supported for Security Version 1")
-        return None
+    # Fetch and print device capabilities before checking pop requirements
+    # This helps users understand why pop might be required
+    # Store the response to reuse later for challenge-response check
+    version_response = None
+    try:
+        print("Checking device capabilities...")
+        version_response = esp_prov.get_version(obj_transport)
+        if version_response:
+            print(f"Device capabilities response: {version_response}")
+        else:
+            print("Device capabilities response: (empty or not available)")
+    except Exception as e:
+        # If we can't get capabilities, continue anyway
+        print(f"Could not retrieve device capabilities: {e}")
 
-    obj_security = esp_prov.get_security(security_version, pop)
+    # Handle Security 1 PoP requirements
+    if security_version == 1:
+        if not esp_prov.has_capability(obj_transport, 'no_pop'):
+            if len(pop) == 0:
+                print("Proof of Possession argument not provided for Security 1")
+                print("Note: Device does not support 'no_pop' capability. Pop is required for Security 1.")
+                return None
+        elif len(pop) != 0:
+            print('Proof of Possession will be ignored (device supports no_pop capability)')
+            pop = ''
+
+    # Handle Security 2 credentials
+    sec_patch_ver = 0
+    if security_version == 2:
+        sec_patch_ver = esp_prov.get_sec_patch_ver(obj_transport)
+        if len(sec2_username) == 0:
+            sec2_username = input('Security Scheme 2 - SRP6a Username required: ')
+        if len(sec2_password) == 0:
+            sec2_password = getpass('Security Scheme 2 - SRP6a Password required: ')
+
+    obj_security = esp_prov.get_security(security_version, sec_patch_ver, 
+                                       sec2_username, sec2_password, pop)
     if obj_security is None:
         print("Invalid Security Version")
         return None
@@ -195,6 +276,56 @@ def provision_device(transport_mode, pop, userid, secretkey,
         return None
     print("Establishing session - Successful")
 
+    # Initialize nodeid and challenge_response_performed flag
+    nodeid = None
+    challenge_response_performed = False
+    
+    # Check for challenge-response capability and perform if supported
+    if session is not None:
+        try:
+            # Reuse capabilities response from earlier, or fetch if not available
+            if version_response is None:
+                print("Attempting to get device capabilities...")
+                version_response = esp_prov.get_version(obj_transport)
+                if version_response:
+                    print(f"Device capabilities response: {version_response}")
+            # If we already have it, no need to print again
+            
+            # Check if device needs to be claimed before provisioning
+            if version_response:
+                try:
+                    capabilities = json.loads(version_response)
+                    if 'rmaker' in capabilities:
+                        rmaker_caps = capabilities.get('rmaker', {}).get('cap', [])
+                        if 'claim' in rmaker_caps or 'camera_claim' in rmaker_caps:
+                            raise RuntimeError("Please claim the node before provisioning")
+                except (json.JSONDecodeError, KeyError):
+                    # If we can't parse capabilities, continue with provisioning
+                    pass
+            
+            if version_response and challenge_response.has_challenge_response_capability(version_response):
+                print("Device supports challenge-response, initiating user-node association...")
+                success, nodeid = challenge_response.perform_challenge_response_flow(
+                    obj_transport, obj_security, session)
+                if not success:
+                    print("Challenge-response user-node association failed")
+                    return None
+                print("Challenge-response user-node association successful")
+                challenge_response_performed = True
+            else:
+                print("Device does not support challenge-response, proceeding with traditional flow")
+        except RuntimeError:
+            # Re-raise RuntimeError (claim requirement) to be handled by caller
+            raise
+        except Exception as e:
+            print(f"Failed to check challenge-response capability - Exception: {e}")
+            print(f"Exception type: {type(e)}")
+            import traceback
+            traceback.print_exc()
+            print("Proceeding with traditional provisioning flow")
+    else:
+        print("No session provided, proceeding with traditional flow")
+
     if not (ssid and passphrase):
         ssid, passphrase = get_wifi_creds_from_scanlist(transport_mode,
                                                         obj_transport,
@@ -202,14 +333,26 @@ def provision_device(transport_mode, pop, userid, secretkey,
                                                         userid,
                                                         secretkey)
 
-    status, nodeid = custom_config(obj_transport,
-                                   obj_security,
-                                   userid,
-                                   secretkey)
-    if status != 0:
-        print("Sending user information to node - Failed")
-        return None
-    print("Sending user information to node - Successful")
+    # Only perform traditional custom_config if challenge-response wasn't performed
+    if not challenge_response_performed:
+        try:
+            status, nodeid = custom_config(obj_transport,
+                                           obj_security,
+                                           userid,
+                                           secretkey)
+            if status != 0:
+                print("Sending user information to node - Failed")
+                return None
+            print("Sending user information to node - Successful")
+        except Exception as e:
+            # Handle devices that don't support cloud_user_assoc endpoint
+            if "Invalid endpoint" in str(e) or "cloud_user_assoc" in str(e):
+                print("Device does not support user-node association endpoint")
+                print("Proceeding with WiFi provisioning only (manual node addition required)")
+                nodeid = "unknown"  # Will need manual addition to account
+            else:
+                print(f"User-node association failed: {e}")
+                return None
 
     if not esp_prov.send_wifi_config(obj_transport,
                                      obj_security,
@@ -227,15 +370,18 @@ def provision_device(transport_mode, pop, userid, secretkey,
     while True:
         time.sleep(5)
         ret = esp_prov.get_wifi_config(obj_transport, obj_security)
-        if (ret == 1):
-            continue
-        elif (ret == 0):
+        if ret == 'connected':
             print("Wi-Fi Provisioning Successful.")
-            return nodeid
-        else:
+            return (nodeid, challenge_response_performed)
+        elif ret == 'connecting':
+            continue  # Keep waiting for connection
+        elif ret in ('disconnected', 'failed', 'unknown') or ret is None:
             print("Wi-Fi Provisioning Failed.")
             return None
-        break
+        else:
+            # Unexpected return value, treat as failure
+            print(f"Wi-Fi Provisioning Failed. Unexpected status: {ret}")
+            return None
     print("Exiting Wi-Fi Provisioning.")
 
 
@@ -252,12 +398,30 @@ if __name__ == '__main__':
                         help=desc_format(
                             'Mode of transport over which provisioning\
                             is to be performed.',
-                            'This should be one of "softap" or "ble"'))
+                            'This should be one of "softap", "ble", or "console"'))
 
-    parser.add_argument("--pop", required=True,
-                        dest='pop', type=str, default='',
+    parser.add_argument("--sec_ver", dest='secver', type=int, default=None,
                         help=desc_format(
-                            'This specifies the Proof of possession (PoP)'))
+                            'Protocomm security scheme used by the provisioning service for secure '
+                            'session establishment. Accepted values are :',
+                            '\t- 0 : No security',
+                            '\t- 1 : X25519 key exchange + AES-CTR encryption',
+                            '\t      + Authentication using Proof of Possession (PoP)',
+                            '\t- 2 : SRP6a + AES-GCM encryption',
+                            'If not specified, security version is auto-detected from device capabilities'))
+
+    parser.add_argument("--pop", dest='pop', type=str, default='',
+                        help=desc_format(
+                            'This specifies the Proof of possession (PoP) when security scheme 1 '
+                            'is used. Required for Security 1, ignored for Security 2'))
+
+    parser.add_argument("--sec2_username", dest='sec2_usr', type=str, default='',
+                        help=desc_format(
+                            'Username for security scheme 2 (SRP6a)'))
+
+    parser.add_argument("--sec2_pwd", dest='sec2_pwd', type=str, default='',
+                        help=desc_format(
+                            'Password for security scheme 2 (SRP6a)'))
 
     parser.add_argument("--userid", dest='userid',
                         required=True, type=str, default='',
@@ -296,9 +460,6 @@ if __name__ == '__main__':
                             'be specified'))
 
     args = parser.parse_args()
-    print(args.ssid)
-    print(args.passphrase)
-    print(args.ssid and args.passphrase)
 
     if not (args.userid and args.secretkey):
         parser.error("Error. --userid and --secretkey are required.")
@@ -306,6 +467,16 @@ if __name__ == '__main__':
     if (args.ssid or args.passphrase) and not (args.ssid and args.passphrase):
         parser.error("Error. --ssid and --passphrase are required.")
 
-    provision_device(args.mode, args.pop, args.userid,
-                     args.secretkey, args.ssid,
-                     args.passphrase)
+    # Validate security 2 requirements
+    if args.secver == 2 and not (args.sec2_usr or args.sec2_pwd):
+        print("Warning: Security 2 selected but no username/password provided. "
+              "You will be prompted for credentials.")
+
+    result = provision_device(args.mode, args.pop, args.userid,
+                              args.secretkey, args.ssid, args.passphrase,
+                              args.secver, args.sec2_usr, args.sec2_pwd)
+    # Handle tuple return for backward compatibility
+    if isinstance(result, tuple):
+        node_id, _ = result
+    else:
+        node_id = result

@@ -495,7 +495,7 @@ def set_schedule(vars=None):
         # Use the shared utility function to format schedule parameters
         # Only auto-generate ID if none was provided by user
         auto_generate_id = vars.get('id') is None
-        
+
         params = format_schedule_params(
             operation=operation,
             schedule_id=vars.get('id'),
@@ -506,7 +506,7 @@ def set_schedule(vars=None):
             flags=vars.get('flags'),
             auto_generate_id=auto_generate_id
         )
-        
+
         # Extract generated ID for 'add' operations
         generated_id = None
         if operation == 'add' and 'Schedule' in params and 'Schedules' in params['Schedule']:
@@ -524,7 +524,7 @@ def set_schedule(vars=None):
     try:
         # Set the parameters on the node(s) using profile-aware session
         curr_session = get_session_with_profile(vars)
-        
+
         # Create batch format for all cases (single and multiple nodes)
         node_params_list = []
         for node_id in node_ids:
@@ -532,7 +532,7 @@ def set_schedule(vars=None):
                 "node_id": node_id,
                 "payload": params
             })
-        
+
         result = node.Node.set_node_params_multiple(node_params_list, curr_session)
 
         # Determine operation string for messages
@@ -561,7 +561,7 @@ def set_schedule(vars=None):
             successful_nodes = result.get("successful_nodes", [])
             failed_nodes = result.get("failed_nodes", [])
             total_nodes = len(node_ids)
-            
+
             if result.get("success", True):
                 if operation == 'add' and generated_id:
                     print(f"Schedule successfully {op_str} with ID: {generated_id} for all {total_nodes} nodes")
@@ -616,7 +616,7 @@ def sharing_request_op(accept_request=False, request_id=None, profile_override=N
 
     :param request_id: Request ID for accept/decline
     :type request_id: str
-    
+
     :param profile_override: Optional profile to use for this operation
     :type profile_override: str
 
@@ -663,7 +663,7 @@ def list_sharing_details(node_id=None, primary_user=False, request_id=None, list
                  If True, list pending requests
                  If False, list sharing details of nodes
     :type list_requests: bool
-    
+
     :param profile_override: Optional profile to use for this operation
     :type profile_override: str
 
@@ -706,7 +706,7 @@ def add_user_to_share_nodes(nodes=None, user=None, profile_override=None):
 
     :param user: User name
     :type user: str
-    
+
     :param profile_override: Optional profile to use for this operation
     :type profile_override: str
 
@@ -756,7 +756,7 @@ def remove_sharing(nodes=None, user=None, request_id=None, profile_override=None
 
     :param request_id: Id of sharing request
     :type request_id: str
-    
+
     :param profile_override: Optional profile to use for this operation
     :type profile_override: str
 
@@ -773,7 +773,7 @@ def remove_sharing(nodes=None, user=None, request_id=None, profile_override=None
     vars_dict = {'profile': profile_override} if profile_override else {}
     curr_session = get_session_with_profile(vars_dict)
     node_obj = node.Node(None, curr_session)
-    
+
     if request_id:
         # API call to remove the shared nodes request
         node_json_resp = node_obj.remove_shared_nodes_request(request_id)
@@ -909,7 +909,7 @@ def node_sharing_ops(vars=None):
 
         # Set operation to base action
         op = action
-        
+
         # Get profile override if specified
         profile_override = vars.get('profile')
 
@@ -1016,6 +1016,8 @@ def get_node_config(vars=None):
 
     :param vars: `nodeid` as key - Node ID for the node
                  `profile` as key - Profile to use for the operation
+                 `local` as key - Use local control instead of cloud
+                 `pop`, `transport`, `port`, `sec_ver` - Local control options
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting node config
@@ -1025,13 +1027,69 @@ def get_node_config(vars=None):
     """
     try:
         node_config = None
-        s = get_session_with_profile(vars or {})
-        n = node.Node(vars['nodeid'], s)
-        node_config = n.get_node_config()
+
+        # Check if local control is requested
+        if vars and vars.get('local', False):
+            try:
+                # Try the proven standalone script integration first
+                from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync
+
+                local_options = {
+                    'pop': vars.get('pop', ''),
+                    'transport': vars.get('transport', 'http'),
+                    'port': vars.get('port', 8080),
+                    'sec_ver': vars.get('sec_ver', 1)
+                }
+
+                node_config = run_local_control_sync(
+                    vars['nodeid'], 'get_config', **local_options
+                )
+
+            except Exception as e:
+                log.debug(f"Standalone integration failed: {e}")
+                # Fallback to direct implementation
+                try:
+                    from rmaker_lib.local_control import run_local_control_operation
+
+                    local_options = {
+                        'pop': vars.get('pop', ''),
+                        'transport': vars.get('transport', 'http'),
+                        'port': vars.get('port', 8080),
+                        'sec_ver': vars.get('sec_ver', 1)
+                    }
+
+                    node_config = run_local_control_operation(
+                        vars['nodeid'], 'get_config', **local_options
+                    )
+                except Exception as e2:
+                    log.debug(f"Direct local control failed: {e2}")
+                    # Final fallback to simple implementation
+                    from rmaker_lib.simple_local_control import run_simple_local_control_operation
+
+                    local_options = {
+                        'pop': vars.get('pop', ''),
+                        'transport': vars.get('transport', 'http'),
+                        'port': vars.get('port', 8080),
+                        'sec_ver': vars.get('sec_ver', 0)  # Force security 0 for simple mode
+                    }
+
+                    log.info("Using simplified local control (security level 0)")
+                    node_config = run_simple_local_control_operation(
+                        vars['nodeid'], 'get_config', **local_options
+                    )
+        else:
+            # Use cloud API
+            s = get_session_with_profile(vars or {})
+            n = node.Node(vars['nodeid'], s)
+            node_config = n.get_node_config()
+
     except Exception as get_nodes_err:
         log.error(get_nodes_err)
     else:
-        print(json.dumps(node_config, indent=4))
+        if node_config:
+            print(json.dumps(node_config, indent=4))
+        else:
+            log.error('Failed to get node configuration')
     return node_config
 
 
@@ -1067,6 +1125,8 @@ def set_params(vars=None):
                  `data` as key - JSON data containing parameters to be set
                  `filepath` as key - Path of the JSON file containing parameters
                  `profile` as key - Profile to use for the operation
+                 `local` as key - Use local control instead of cloud
+                 `pop`, `transport`, `port`, `sec_ver` - Local control options
     :type vars: dict | None
 
     :raises NetworkError: If there is a network connection issue during
@@ -1089,18 +1149,82 @@ def set_params(vars=None):
     node_ids = [node_id.strip() for node_id in vars['nodeid'].split(',')]
 
     try:
-        s = get_session_with_profile(vars or {})
-        
-        # Create batch format for all cases (single and multiple nodes)
-        node_params_list = []
-        for node_id in node_ids:
-            node_params_list.append({
-                "node_id": node_id,
-                "payload": data
-            })
-        
-        result = node.Node.set_node_params_multiple(node_params_list, s)
-            
+        # Check if local control is requested
+        if vars and vars.get('local', False):
+            try:
+                from rmaker_lib.local_control import run_local_control_operation
+
+                local_options = {
+                    'pop': vars.get('pop', ''),
+                    'transport': vars.get('transport', 'http'),
+                    'port': vars.get('port', 8080),
+                    'sec_ver': vars.get('sec_ver', 1)
+                }
+
+                # For local control, handle multiple nodes individually
+                success_count = 0
+                failed_nodes = []
+
+                for node_id in node_ids:
+                    result = run_local_control_operation(
+                        node_id, 'set_params', data, **local_options
+                    )
+                    if result:
+                        success_count += 1
+                    else:
+                        failed_nodes.append(node_id)
+
+            except ImportError:
+                # Fallback to simple implementation
+                from rmaker_lib.simple_local_control import run_simple_local_control_operation
+
+                local_options = {
+                    'pop': vars.get('pop', ''),
+                    'transport': vars.get('transport', 'http'),
+                    'port': vars.get('port', 8080),
+                    'sec_ver': vars.get('sec_ver', 0)  # Force security 0 for simple mode
+                }
+
+                log.info("Using simplified local control (security level 0)")
+                success_count = 0
+                failed_nodes = []
+
+                for node_id in node_ids:
+                    result = run_simple_local_control_operation(
+                        node_id, 'set_params', data, **local_options
+                    )
+                    if result:
+                        success_count += 1
+                    else:
+                        failed_nodes.append(node_id)
+
+            # Report results
+            if len(node_ids) == 1:
+                if success_count == 1:
+                    print('Node parameters updated successfully via local control.')
+                else:
+                    print('Failed to update node parameters via local control.')
+            else:
+                print(f'Local control: {success_count}/{len(node_ids)} nodes updated successfully.')
+                if failed_nodes:
+                    print(f'Failed nodes: {failed_nodes}')
+
+            # Return early to avoid cloud API processing
+            return
+        else:
+            # Use cloud API
+            s = get_session_with_profile(vars or {})
+
+            # Create batch format for all cases (single and multiple nodes)
+            node_params_list = []
+            for node_id in node_ids:
+                node_params_list.append({
+                    "node_id": node_id,
+                    "payload": data
+                })
+
+            result = node.Node.set_node_params_multiple(node_params_list, s)
+
     except SSLError:
         log.error(SSLError())
     except NetworkError as conn_err:
@@ -1124,7 +1248,7 @@ def set_params(vars=None):
             successful_nodes = result.get("successful_nodes", [])
             failed_nodes = result.get("failed_nodes", [])
             total_nodes = len(node_ids)
-            
+
             if result.get("success", True):
                 print(f'Parameters updated successfully for all {total_nodes} nodes.')
             else:
@@ -1144,6 +1268,8 @@ def get_params(vars=None):
 
     :param vars: `nodeid` as key - Node ID for the node
                  `profile` as key - Profile to use for the operation
+                 `local` as key - Use local control instead of cloud
+                 `pop`, `transport`, `port`, `sec_ver` - Local control options
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting params or
@@ -1154,9 +1280,62 @@ def get_params(vars=None):
     """
     try:
         params = None
-        s = get_session_with_profile(vars or {})
-        n = node.Node(vars['nodeid'], s)
-        params = n.get_node_params()
+
+        # Check if local control is requested
+        if vars and vars.get('local', False):
+            try:
+                # Try the proven standalone script integration first
+                from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync
+
+                local_options = {
+                    'pop': vars.get('pop', ''),
+                    'transport': vars.get('transport', 'http'),
+                    'port': vars.get('port', 8080),
+                    'sec_ver': vars.get('sec_ver', 1)
+                }
+
+                params = run_local_control_sync(
+                    vars['nodeid'], 'get_params', **local_options
+                )
+
+            except Exception as e:
+                log.debug(f"Standalone integration failed: {e}")
+                # Fallback to direct implementation
+                try:
+                    from rmaker_lib.local_control import run_local_control_operation
+
+                    local_options = {
+                        'pop': vars.get('pop', ''),
+                        'transport': vars.get('transport', 'http'),
+                        'port': vars.get('port', 8080),
+                        'sec_ver': vars.get('sec_ver', 1)
+                    }
+
+                    params = run_local_control_operation(
+                        vars['nodeid'], 'get_params', **local_options
+                    )
+                except Exception as e2:
+                    log.debug(f"Direct local control failed: {e2}")
+                    # Final fallback to simple implementation
+                    from rmaker_lib.simple_local_control import run_simple_local_control_operation
+
+                    local_options = {
+                        'pop': vars.get('pop', ''),
+                        'transport': vars.get('transport', 'http'),
+                        'port': vars.get('port', 8080),
+                        'sec_ver': vars.get('sec_ver', 0)  # Force security 0 for simple mode
+                    }
+
+                    log.info("Using simplified local control (security level 0)")
+                    params = run_simple_local_control_operation(
+                        vars['nodeid'], 'get_params', **local_options
+                    )
+        else:
+            # Use cloud API
+            s = get_session_with_profile(vars or {})
+            n = node.Node(vars['nodeid'], s)
+            params = n.get_node_params()
+
     except SSLError:
         log.error(SSLError())
     except NetworkError as conn_err:
@@ -1269,7 +1448,7 @@ def ota_upgrade(vars=None):
     try:
         node_id = vars['nodeid']
         ota_image_path = vars['otaimagepath']
-        
+
         s = get_session_with_profile(vars or {})
         n = node.Node(node_id, s)
         response = n.upload_ota_image(ota_image_path)

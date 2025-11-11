@@ -12,5 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .wifi_prov import *  # noqa F403
-from .wifi_scan import * # noqa F403
+# Import shared prov modules from common
+try:
+    from ...common.prov.wifi_prov import *  # noqa F403
+    from ...common.prov.wifi_scan import * # noqa F403
+except ImportError:
+    # Fallback for pip-installed packages
+    from rmaker_tools.common.prov.wifi_prov import *  # noqa F403
+    from rmaker_tools.common.prov.wifi_scan import * # noqa F403
+# Import module-specific files locally
+from .user_mapping import * # noqa F403

@@ -13,7 +13,15 @@
 # limitations under the License.
 
 import os, sys
-from rmaker_lib.logger import log
+
+def log_error(msg):
+    print(f"ERROR: {msg}")
+
+# Compatibility logger  
+class log:
+    @staticmethod
+    def error(msg):
+        log_error(msg)
 
 def _load_source(name, path):
     try:
@@ -44,3 +52,8 @@ wifi_scan_pb2      = _load_source("wifi_scan_pb2",      wifi_prov_path + "python
 
 # custom_provisioning component related python files generated from .proto files
 custom_cloud_config_pb2  = _load_source("custom_cloud_config_pb2",  os.path.join(os.path.dirname(__file__),"../") + "config/custom_cloud_config_pb2.py")
+
+# ESP RainMaker component related python files generated from .proto files
+esp_rmaker_user_mapping_pb2 = _load_source("esp_rmaker_user_mapping_pb2", os.path.join(os.path.dirname(__file__),"../") + "config/esp_rmaker_user_mapping_pb2.py")
+esp_rmaker_claim_pb2 = _load_source("esp_rmaker_claim_pb2", os.path.join(os.path.dirname(__file__),"../") + "config/esp_rmaker_claim_pb2.py")
+esp_rmaker_chal_resp_pb2 = _load_source("esp_rmaker_chal_resp_pb2", os.path.join(os.path.dirname(__file__),"../") + "config/esp_rmaker_chal_resp_pb2.py")
