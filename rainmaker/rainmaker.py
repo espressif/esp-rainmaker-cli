@@ -225,6 +225,27 @@ def main():
                                       type=str,
                                       metavar='<nodeid>',
                                       help='Node ID for the node')
+    getnodeconfig_parser.add_argument('--local',
+                                     action='store_true',
+                                     help='Use local control instead of cloud')
+    getnodeconfig_parser.add_argument('--pop',
+                                     type=str,
+                                     default='',
+                                     help='Proof of possession for local control')
+    getnodeconfig_parser.add_argument('--transport',
+                                     type=str,
+                                     choices=['http', 'https', 'ble'],
+                                     default='http',
+                                     help='Transport protocol for local control')
+    getnodeconfig_parser.add_argument('--port',
+                                     type=int,
+                                     default=8080,
+                                     help='Port for local control (default: 8080)')
+    getnodeconfig_parser.add_argument('--sec_ver',
+                                     type=int,
+                                     choices=[0, 1, 2],
+                                     default=1,
+                                     help='Security version for local control')
     add_profile_argument(getnodeconfig_parser)
     getnodeconfig_parser.set_defaults(func=get_node_config)
 
@@ -245,17 +266,40 @@ def main():
     setparams_parser.add_argument('nodeid',
                                   metavar='<nodeid>',
                                   help='Node ID for the node (or comma-separated list of node IDs)')
-    setparams_parser = setparams_parser.add_mutually_exclusive_group(
+    setparams_data_group = setparams_parser.add_mutually_exclusive_group(
         required=True)
 
-    setparams_parser.add_argument('--filepath',
-                                  help='Path of the JSON file\
-                                        containing parameters to be set')
-    setparams_parser.add_argument('--data',
-                                  help='JSON data to be set')
-    # Note: setparams_parser is mutually exclusive group, so we add profile to the parent
-    setparams_main_parser = subparsers._name_parser_map['setparams']
-    add_profile_argument(setparams_main_parser)
+    setparams_data_group.add_argument('--filepath',
+                                      help='Path of the JSON file\
+                                            containing parameters to be set')
+    setparams_data_group.add_argument('--data',
+                                      help='JSON data to be set')
+    
+    # Add local control options
+    setparams_parser.add_argument('--local',
+                                 action='store_true',
+                                 help='Use local control instead of cloud')
+    setparams_parser.add_argument('--pop',
+                                 type=str,
+                                 default='',
+                                 help='Proof of possession for local control')
+    setparams_parser.add_argument('--transport',
+                                 type=str,
+                                 choices=['http', 'https', 'ble'],
+                                 default='http',
+                                 help='Transport protocol for local control')
+    setparams_parser.add_argument('--port',
+                                 type=int,
+                                 default=8080,
+                                 help='Port for local control (default: 8080)')
+    setparams_parser.add_argument('--sec_ver',
+                                 type=int,
+                                 choices=[0, 1, 2],
+                                 default=1,
+                                 help='Security version for local control')
+    
+    # Note: setparams_data_group is mutually exclusive group, so we add profile to the parent
+    add_profile_argument(setparams_parser)
     setparams_parser.set_defaults(func=set_params)
 
     getparams_parser = subparsers.add_parser('getparams',
@@ -263,6 +307,27 @@ def main():
     getparams_parser.add_argument('nodeid',
                                   metavar='<nodeid>',
                                   help='Node ID for the node')
+    getparams_parser.add_argument('--local',
+                                 action='store_true',
+                                 help='Use local control instead of cloud')
+    getparams_parser.add_argument('--pop',
+                                 type=str,
+                                 default='',
+                                 help='Proof of possession for local control')
+    getparams_parser.add_argument('--transport',
+                                 type=str,
+                                 choices=['http', 'https', 'ble'],
+                                 default='http',
+                                 help='Transport protocol for local control')
+    getparams_parser.add_argument('--port',
+                                 type=int,
+                                 default=8080,
+                                 help='Port for local control (default: 8080)')
+    getparams_parser.add_argument('--sec_ver',
+                                 type=int,
+                                 choices=[0, 1, 2],
+                                 default=1,
+                                 help='Security version for local control')
     add_profile_argument(getparams_parser)
     getparams_parser.set_defaults(func=get_params)
 
@@ -276,12 +341,60 @@ def main():
     remove_node_parser.set_defaults(func=remove_node)
 
     provision_parser = subparsers.add_parser('provision',
-                                             help='Provision the node'
-                                                   ' to join Wi-Fi network')
+                                             help='Provision the node to join Wi-Fi network',
+                                             formatter_class=argparse.RawTextHelpFormatter)
+    
     provision_parser.add_argument('pop',
                                   type=str,
+                                  nargs='?',
                                   metavar='<pop>',
-                                  help='Proof of possesion for the node')
+                                  help=argparse.SUPPRESS)  # Hide deprecated positional argument
+    
+    provision_parser.add_argument('--pop',
+                                  type=str,
+                                  dest='pop_flag',
+                                  required=False,
+                                  help='Proof of possession for the node')
+    
+    provision_parser.add_argument('--transport',
+                                  type=str,
+                                  choices=['softap', 'ble', 'console'],
+                                  default='softap',
+                                  help='Transport mode for provisioning:\n'
+                                       '  softap  - SoftAP + HTTP (default)\n'
+                                       '  ble     - Bluetooth Low Energy\n'
+                                       '  console - Serial console')
+    
+    provision_parser.add_argument('--sec_ver',
+                                  type=int,
+                                  choices=[0, 1, 2],
+                                  help='Security scheme:\n'
+                                       '  0 - No security\n'
+                                       '  1 - Security 1 (X25519 + AES-CTR + PoP)\n'
+                                       '  2 - Security 2 (SRP6a + AES-GCM)\n'
+                                       'If not specified, auto-detected from device')
+    
+    provision_parser.add_argument('--sec2_username',
+                                  type=str,
+                                  help='Username for Security 2 (SRP6a)')
+    
+    provision_parser.add_argument('--sec2_password',
+                                  type=str,
+                                  help='Password for Security 2 (SRP6a)')
+    
+    provision_parser.add_argument('--device_name',
+                                  type=str,
+                                  help='Device name for BLE transport\n'
+                                       '(e.g., PROV_d76c30)')
+    
+    provision_parser.add_argument('--ssid',
+                                  type=str,
+                                  help='WiFi SSID (if not provided, shows scan list)')
+    
+    provision_parser.add_argument('--passphrase',
+                                  type=str,
+                                  help='WiFi password')
+    
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
 

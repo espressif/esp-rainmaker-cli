@@ -71,6 +71,30 @@ This returns the node's configuration in JSON format, including:
 - Services and their attributes
 - Node information (name, type, firmware version)
 
+#### Local Control Mode
+
+For faster response times, you can get node configuration directly from the device on your local network:
+
+```bash
+esp-rainmaker-cli getnodeconfig <nodeid> --local --pop <pop_value>
+```
+
+Local control options:
+- `--local`: Enable local control mode (5-10x faster than cloud)
+- `--pop <value>`: Proof of Possession for device authentication
+- `--transport <type>`: Transport protocol (http/https/ble, default: http)
+- `--port <number>`: Port number (default: 8080)
+- `--sec_ver <version>`: Security version (0/1/2, default: 1)
+
+Example:
+```bash
+esp-rainmaker-cli getnodeconfig N7FXSyMjeYFhWcRyDig7t3 --local --pop 2c4d470d
+```
+
+**Performance comparison:**
+- Cloud API: 500-2000ms response time
+- Local Control: 50-200ms response time (5-10x faster)
+
 ### Getting Node Status
 
 To check if a node is online or offline:

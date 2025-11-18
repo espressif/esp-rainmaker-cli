@@ -39,7 +39,7 @@ The CLI supports the following main commands:
 
 * `configure --region <region>` - Configure ESP RainMaker region (china, global)
 * `profile list` - List all available profiles
-* `profile current` - Show current profile information  
+* `profile current` - Show current profile information
 * `profile switch <name>` - Switch to a different profile
 * `profile add <name> --base-url <url>` - Add a new custom profile
 * `profile remove <name>` - Remove a custom profile
@@ -107,6 +107,7 @@ For detailed documentation on specific commands, refer to the following files:
 * [Claiming](./commands/claiming.md)
 * [Provisioning](./commands/provisioning.md)
 * [Command Response](./commands/command_response.md)
+* [ESP Local Control](./commands/local_control.md)
 
 ## Examples
 
@@ -124,4 +125,4 @@ For the full list of available commands:
 
 ```bash
 esp-rainmaker-cli --help
-``` 
+```

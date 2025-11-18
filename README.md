@@ -31,6 +31,19 @@ For more help, you can also run the following command:
 esp-rainmaker-cli --help
 ```
 
+## Key Features
+
+### 🔧 Enhanced Device Provisioning
+Support for BLE, SoftAP, and Console transport modes with Security 0/1/2 schemes. Use the new `--pop` flag for cleaner syntax.
+```bash
+esp-rainmaker-cli provision --pop abcd1234 --transport ble --device_name PROV_device
+```
+
+### ⚡ ESP Local Control
+Direct device communication on your local network with 5-10x faster response times using the `--local` flag.
+
+For detailed documentation, see [Provisioning Guide](docs/commands/provisioning.md) and [ESP Local Control Guide](docs/commands/local_control.md).
+
 ## Development Guide
 
 Development mode allows you to run the latest version of esp-rainmaker-cli from the repository.

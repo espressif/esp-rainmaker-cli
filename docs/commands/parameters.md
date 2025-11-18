@@ -26,6 +26,30 @@ esp-rainmaker-cli getparams abcd1234
 
 This returns a JSON object containing all parameters for all devices and services on the node.
 
+#### Local Control Mode
+
+For faster parameter retrieval, you can get parameters directly from the device on your local network:
+
+```bash
+esp-rainmaker-cli getparams <nodeid> --local --pop <pop_value>
+```
+
+Local control options:
+- `--local`: Enable local control mode (5-10x faster than cloud)
+- `--pop <value>`: Proof of Possession for device authentication
+- `--transport <type>`: Transport protocol (http/https/ble, default: http)
+- `--port <number>`: Port number (default: 8080)
+- `--sec_ver <version>`: Security version (0/1/2, default: 1)
+
+Example:
+```bash
+esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local --pop 2c4d470d
+```
+
+**Performance comparison:**
+- Cloud API: 500-2000ms response time
+- Local Control: 50-200ms response time (5-10x faster)
+
 ### Setting Parameters
 
 There are two ways to set parameters:
@@ -63,6 +87,30 @@ Where `light_params.json` might contain:
     }
 }
 ```
+
+#### Local Control Mode for Setting Parameters
+
+For faster parameter setting, you can set parameters directly on the device via local network:
+
+```bash
+esp-rainmaker-cli setparams <nodeid> --data '<json_data>' --local --pop <pop_value>
+```
+
+Example:
+```bash
+esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": true, "Brightness": 75}}' --local --pop 2c4d470d
+```
+
+Local control options for setparams:
+- `--local`: Enable local control mode (8-10x faster than cloud)
+- `--pop <value>`: Proof of Possession for device authentication
+- `--transport <type>`: Transport protocol (http/https/ble, default: http)
+- `--port <number>`: Port number (default: 8080)
+- `--sec_ver <version>`: Security version (0/1/2, default: 1)
+
+**Performance comparison for setparams:**
+- Cloud API: 800-3000ms response time
+- Local Control: 100-300ms response time (8-10x faster)
 
 ## Parameter Structure
 
@@ -214,4 +262,40 @@ esp-rainmaker-cli setparams abcd1234 --data '{"Thermostat": {"Mode": "Cooling"}}
 ```bash
 # Control multiple devices at once
 esp-rainmaker-cli setparams abcd1234 --data '{"Light": {"Power": true}, "Fan": {"Power": true, "Speed": 2}}'
-``` 
+```
+
+## Local Control Examples
+
+### Fast Device Control
+
+```bash
+# Quickly turn on a light (local control)
+esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": true}}' --local --pop 2c4d470d
+
+# Set multiple parameters with local control
+esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": true, "Brightness": 80, "Hue": 120}}' --local --pop 2c4d470d
+
+# Get current state quickly
+esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local --pop 2c4d470d
+```
+
+### Finding Device PoP Value
+
+To use local control, you need the device's Proof of Possession (PoP) value:
+
+```bash
+# Get PoP from cloud (one-time lookup)
+esp-rainmaker-cli getparams <nodeid>
+# Look for "Local Control" service with "POP" parameter
+```
+
+Or check the device's physical label/QR code for the PoP value.
+
+### Local Control Benefits
+
+- **Speed**: 5-10x faster response times
+- **Reliability**: Works even when internet is down
+- **Privacy**: No data sent to cloud servers
+- **Responsiveness**: Real-time device control for better user experience
+
+For more details on ESP Local Control, see the [Local Control Guide](local_control.md). 

@@ -12,4 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .convenience import *  # noqa: F403, F401
+# Import shared utils modules from common
+try:
+    from ...common.utils.convenience import *  # noqa: F403, F401
+except ImportError:
+    # Fallback for pip-installed packages
+    from rmaker_tools.common.utils.convenience import *  # noqa: F403, F401
