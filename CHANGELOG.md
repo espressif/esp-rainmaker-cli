@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.8.1] - TBD
+### Added
+- An option --no-wifi to allow challenge-response based user-node mapping without Wi-Fi provisioning.
+
 ## [1.8.1] - 19-Dec-2025
 ### Added
 - An option --no-retry for provisioning, to avoid user-interactive prompts asking to retry in case of failures

@@ -35,19 +35,19 @@ except ImportError:
 
     # Import using importlib for better control
     import importlib.util
-    
+
     # Import user_mapping
     user_mapping_path = os.path.join(current_dir, 'prov', 'user_mapping.py')
     spec = importlib.util.spec_from_file_location("user_mapping", user_mapping_path)
     cloud_config_prov = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cloud_config_prov)
-    
+
     # Import prov_util
     prov_util_path = os.path.join(current_dir, 'prov', 'prov_util.py')
     spec = importlib.util.spec_from_file_location("prov_util", prov_util_path)
     esp_prov = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(esp_prov)
-    
+
     # Import challenge_response
     challenge_response_path = os.path.join(current_dir, 'challenge_response.py')
     spec = importlib.util.spec_from_file_location("challenge_response", challenge_response_path)
@@ -163,7 +163,7 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
 
 def provision_device(transport_mode, pop, userid, secretkey,
                      ssid=None, passphrase=None, security_version=None,
-                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False):
+                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False, no_wifi=False):
     """
     Wi-Fi Provision a device
 
@@ -193,7 +193,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
         defaults to 'None'
     :type passphrase: str, optional
 
-    :param security_version: Security version (0, 1, or 2). If None, 
+    :param security_version: Security version (0, 1, or 2). If None,
                             auto-detected from device capabilities.
     :type security_version: int, optional
 
@@ -212,13 +212,17 @@ def provision_device(transport_mode, pop, userid, secretkey,
     :param no_retry: If True, exit immediately if prov-ctrl succeeds without prompting for retry
     :type no_retry: bool, optional
 
+    :param no_wifi: If True, skip WiFi provisioning and only perform challenge-response mapping.
+                    Device must support challenge-response capability, otherwise an error is raised.
+    :type no_wifi: bool, optional
+
     :return: nodeid (Node Identifier) on Success, None on Failure
     :rtype: str | None
     """
     # Ensure pop is always a string (not None) to avoid len() errors
     if pop is None:
         pop = ''
-    
+
     # Set service name based on transport mode
     if transport_mode.lower() == 'ble':
         service_name = device_name  # Use device name for BLE
@@ -276,7 +280,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
         if len(sec2_password) == 0:
             sec2_password = getpass('Security Scheme 2 - SRP6a Password required: ')
 
-    obj_security = esp_prov.get_security(security_version, sec_patch_ver, 
+    obj_security = esp_prov.get_security(security_version, sec_patch_ver,
                                        sec2_username, sec2_password, pop)
     if obj_security is None:
         print("Invalid Security Version")
@@ -292,7 +296,13 @@ def provision_device(transport_mode, pop, userid, secretkey,
     # Initialize nodeid and challenge_response_performed flag
     nodeid = None
     challenge_response_performed = False
-    
+
+    # If --no-wifi is requested, session is required for challenge-response
+    if no_wifi and session is None:
+        error_msg = ("--no-wifi flag requires an authenticated session for challenge-response mapping. "
+                    "Please ensure you are logged in.")
+        raise RuntimeError(error_msg)
+
     # Check for challenge-response capability and perform if supported
     if session is not None:
         try:
@@ -303,7 +313,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
                 if version_response:
                     print(f"Device capabilities response: {version_response}")
             # If we already have it, no need to print again
-            
+
             # Check if device needs to be claimed before provisioning
             if version_response:
                 try:
@@ -315,7 +325,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
                 except (json.JSONDecodeError, KeyError):
                     # If we can't parse capabilities, continue with provisioning
                     pass
-            
+
             if version_response and challenge_response.has_challenge_response_capability(version_response):
                 print("Device supports challenge-response, initiating user-node association...")
                 success, nodeid = challenge_response.perform_challenge_response_flow(
@@ -324,9 +334,13 @@ def provision_device(transport_mode, pop, userid, secretkey,
                     print("Challenge-response user-node association failed")
                     return None
                 print("Challenge-response user-node association successful")
+                print(f"✅ Node {nodeid} added to your account successfully!")
                 challenge_response_performed = True
             else:
-                print("Device does not support challenge-response, proceeding with traditional flow")
+                # Only print this message if we're not in --no-wifi mode
+                # (in --no-wifi mode, we'll raise an error below)
+                if not no_wifi:
+                    print("Device does not support challenge-response, proceeding with traditional flow")
         except RuntimeError:
             # Re-raise RuntimeError (claim requirement) to be handled by caller
             raise
@@ -339,6 +353,18 @@ def provision_device(transport_mode, pop, userid, secretkey,
     else:
         print("No session provided, proceeding with traditional flow")
 
+    # Handle --no-wifi flag: skip WiFi provisioning if challenge-response was performed
+    if no_wifi:
+        if challenge_response_performed:
+            print("Skipping WiFi provisioning as requested (--no-wifi).")
+            return (nodeid, challenge_response_performed)
+        else:
+            # Device doesn't support challenge-response, but --no-wifi was requested
+            error_msg = ("--no-wifi flag requires device to support challenge-response capability. "
+                        "This device does not support challenge-response based user-node mapping.")
+            raise RuntimeError(error_msg)
+
+    # Set up retry logic for WiFi provisioning
     dynamic_credentials = not bool(ssid and passphrase)
     prov_ctrl_succeeded = False  # Track if prov-ctrl reset succeeded
 
@@ -376,7 +402,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
         nonlocal ssid, passphrase, dynamic_credentials, prov_ctrl_succeeded
         if reason_msg:
             print(reason_msg)
-        
+
         # Try to reset device state before asking user if they want to retry
         if not request_device_reset():
             # If reset failed, print error message and exit without offering retry
@@ -384,13 +410,13 @@ def provision_device(transport_mode, pop, userid, secretkey,
             prov_ctrl_succeeded = False
             print('Provisioning Failed. Reset your board to factory defaults and retry.')
             return False
-        
+
         # If --no-retry is set and reset succeeded, exit with message
         # Don't show factory defaults message since prov-ctrl succeeded
         if no_retry:
             print('Device is reset to provisioning. Please try again')
             return False
-        
+
         # Only offer retry if reset succeeded
         if not prompt_yes_no('Would you like to retry provisioning? [y/N]: '):
             # User declined retry, but prov-ctrl succeeded, so don't ask to reset to factory defaults
@@ -446,6 +472,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
                 print(f"User-node association failed: {e}")
                 return None
 
+    # WiFi provisioning with retry support
     while True:
         if not (ssid and passphrase):
             ssid, passphrase = get_wifi_creds_from_scanlist(transport_mode,

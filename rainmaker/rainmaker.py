@@ -274,7 +274,7 @@ def main():
                                             containing parameters to be set')
     setparams_data_group.add_argument('--data',
                                       help='JSON data to be set')
-    
+
     # Add local control options
     setparams_parser.add_argument('--local',
                                  action='store_true',
@@ -297,7 +297,7 @@ def main():
                                  choices=[0, 1, 2],
                                  default=1,
                                  help='Security version for local control')
-    
+
     # Note: setparams_data_group is mutually exclusive group, so we add profile to the parent
     add_profile_argument(setparams_parser)
     setparams_parser.set_defaults(func=set_params)
@@ -343,19 +343,19 @@ def main():
     provision_parser = subparsers.add_parser('provision',
                                              help='Provision the node to join Wi-Fi network',
                                              formatter_class=argparse.RawTextHelpFormatter)
-    
+
     provision_parser.add_argument('pop',
                                   type=str,
                                   nargs='?',
                                   metavar='<pop>',
                                   help=argparse.SUPPRESS)  # Hide deprecated positional argument
-    
+
     provision_parser.add_argument('--pop',
                                   type=str,
                                   dest='pop_flag',
                                   required=False,
                                   help='Proof of possession for the node')
-    
+
     provision_parser.add_argument('--transport',
                                   type=str,
                                   choices=['softap', 'ble', 'console'],
@@ -363,7 +363,7 @@ def main():
                                        '  softap  - SoftAP + HTTP (default)\n'
                                        '  ble     - Bluetooth Low Energy\n'
                                        '  console - Serial console')
-    
+
     provision_parser.add_argument('--sec_ver',
                                   type=int,
                                   choices=[0, 1, 2],
@@ -372,39 +372,45 @@ def main():
                                        '  1 - Security 1 (X25519 + AES-CTR + PoP)\n'
                                        '  2 - Security 2 (SRP6a + AES-GCM)\n'
                                        'If not specified, auto-detected from device')
-    
+
     provision_parser.add_argument('--sec2_username',
                                   type=str,
                                   help='Username for Security 2 (SRP6a)')
-    
+
     provision_parser.add_argument('--sec2_password',
                                   type=str,
                                   help='Password for Security 2 (SRP6a)')
-    
+
     provision_parser.add_argument('--device_name',
                                   type=str,
                                   help='Device name for BLE transport\n'
                                        '(e.g., PROV_d76c30)')
-    
+
     provision_parser.add_argument('--ssid',
                                   type=str,
                                   help='WiFi SSID (if not provided, shows scan list)')
-    
+
     provision_parser.add_argument('--passphrase',
                                   type=str,
                                   help='WiFi password')
-    
+
     provision_parser.add_argument('--qrcode',
                                   type=str,
                                   help='QR code payload as JSON string\n'
                                        '(e.g., \'{"ver":"v1","name":"PROV_fc9ea3","pop":"7a9d365e","transport":"ble"}\')\n'
                                        'Values from QR code will be used as defaults, but can be overridden\n'
                                        'by explicit --transport, --device_name, and --pop options')
-    
+
     provision_parser.add_argument('--no-retry',
                                   action='store_true',
                                   help='Exit immediately on provisioning failure without prompting for retry')
-    
+
+
+    provision_parser.add_argument('--no-wifi',
+                                  action='store_true',
+                                  help='Skip WiFi provisioning and only perform challenge-response user-node mapping.\n'
+                                       'Device must support challenge-response capability, otherwise an error is raised.')
+
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
 
