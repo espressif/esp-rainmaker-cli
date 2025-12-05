@@ -49,6 +49,7 @@ session_pb2   = _load_source("session_pb2",   protocomm_path + "python/session_p
 wifi_constants_pb2 = _load_source("wifi_constants_pb2", wifi_prov_path + "python/wifi_constants_pb2.py")
 wifi_config_pb2    = _load_source("wifi_config_pb2",    wifi_prov_path + "python/wifi_config_pb2.py")
 wifi_scan_pb2      = _load_source("wifi_scan_pb2",      wifi_prov_path + "python/wifi_scan_pb2.py")
+wifi_ctrl_pb2      = _load_source("wifi_ctrl_pb2",      wifi_prov_path + "python/wifi_ctrl_pb2.py")
 
 # custom_provisioning component related python files generated from .proto files
 custom_cloud_config_pb2  = _load_source("custom_cloud_config_pb2",  os.path.join(os.path.dirname(__file__),"../") + "config/custom_cloud_config_pb2.py")

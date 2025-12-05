@@ -32,7 +32,7 @@ except ImportError:
     # Fallback: Direct imports using full module path
     current_dir = os.path.dirname(__file__)
     sys.path.insert(0, current_dir)
-    
+
     # Import using importlib for better control
     import importlib.util
     
@@ -101,14 +101,24 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
         exit(3)
 
     while True:
-        print("Scanning Wi-Fi AP's...")
-        access_points = esp_prov.scan_wifi_APs(transport_mode,
-                                               obj_transport,
-                                               obj_security)
-        len_access_points = len(access_points)
+        try:
+            print("Scanning Wi-Fi AP's...")
+            access_points = esp_prov.scan_wifi_APs(transport_mode,
+                                                   obj_transport,
+                                                   obj_security)
+        except RuntimeError as e:
+            print(f"Scanning failed: {e}")
+            access_points = None
+
+        len_access_points = len(access_points) if access_points else 0
         end_time = time.time()
+
         if access_points is None:
             print("Scanning Wi-Fi AP's - Failed")
+            if input("Do you want to enter SSID manually? [y/N]: ").strip().lower() in ('y', 'yes'):
+                ssid = input("Enter ssid :")
+                passphrase = getpass(f"Enter passphrase for {ssid} : ")
+                return ssid, passphrase
             exit(8)
 
         if len_access_points == 0:
@@ -326,12 +336,77 @@ def provision_device(transport_mode, pop, userid, secretkey,
     else:
         print("No session provided, proceeding with traditional flow")
 
-    if not (ssid and passphrase):
-        ssid, passphrase = get_wifi_creds_from_scanlist(transport_mode,
-                                                        obj_transport,
-                                                        obj_security,
-                                                        userid,
-                                                        secretkey)
+    dynamic_credentials = not bool(ssid and passphrase)
+
+    def prompt_yes_no(prompt, default=False):
+        while True:
+            choice = input(prompt).strip().lower()
+            if not choice:
+                return default
+            if choice in ('y', 'yes'):
+                return True
+            if choice in ('n', 'no'):
+                return False
+            print('Please respond with yes or no (y/n).')
+
+    def request_device_reset():
+        # Try reset silently - only show messages if it succeeds
+        try:
+            reset_ok = esp_prov.ctrl_reset(obj_transport, obj_security)
+        except RuntimeError as err:
+            return False
+
+        if not reset_ok:
+            return False
+
+        # Only show message if reset succeeded
+        print('Device reset via prov-ctrl successful.')
+        time.sleep(2)
+        return True
+
+    def handle_retry(reason_msg):
+        nonlocal ssid, passphrase, dynamic_credentials
+        if reason_msg:
+            print(reason_msg)
+        
+        # Try to reset device state before asking user if they want to retry
+        if not request_device_reset():
+            # If reset failed, print error message and exit without offering retry
+            # Don't mention prov-ctrl since it failed silently
+            print('Provisioning Failed. Reset your board to factory defaults and retry.')
+            return False
+        
+        # Only offer retry if reset succeeded
+        if not prompt_yes_no('Would you like to retry provisioning? [y/N]: '):
+            print('Provisioning Failed. Reset your board to factory defaults and retry.')
+            return False
+
+        # If we have an SSID, offer to retry with the same SSID but new password
+        if ssid:
+            if prompt_yes_no(f"Retry with same SSID '{ssid}' and new password? [Y/n]: ", default=True):
+                passphrase = getpass(f"Enter passphrase for {ssid} : ")
+                dynamic_credentials = True
+                return True
+
+        if dynamic_credentials:
+            ssid = None
+            passphrase = None
+        else:
+            if prompt_yes_no('Do you want to re-enter Wi-Fi credentials? [y/N]: '):
+                ssid = None
+                passphrase = None
+                dynamic_credentials = True
+        return True
+
+    def wait_for_wifi_connection():
+        while True:
+            time.sleep(5)
+            ret = esp_prov.get_wifi_config(obj_transport, obj_security)
+            if ret == 'connected':
+                return True, 'connected'
+            if ret == 'connecting':
+                continue
+            return False, ret or 'failed'
 
     # Only perform traditional custom_config if challenge-response wasn't performed
     if not challenge_response_performed:
@@ -354,35 +429,42 @@ def provision_device(transport_mode, pop, userid, secretkey,
                 print(f"User-node association failed: {e}")
                 return None
 
-    if not esp_prov.send_wifi_config(obj_transport,
-                                     obj_security,
-                                     ssid,
-                                     passphrase):
-        print("Sending Wi-Fi credentials to node - Failed")
-        return None
-    print("Sending Wi-Fi credentials to node - Successful")
-
-    if not esp_prov.apply_wifi_config(obj_transport, obj_security):
-        print("Applying Wi-Fi config to node - Failed")
-        return None
-    print("Applying Wi-Fi config to node - Successful")
-
     while True:
-        time.sleep(5)
-        ret = esp_prov.get_wifi_config(obj_transport, obj_security)
-        if ret == 'connected':
+        if not (ssid and passphrase):
+            ssid, passphrase = get_wifi_creds_from_scanlist(transport_mode,
+                                                            obj_transport,
+                                                            obj_security,
+                                                            userid,
+                                                            secretkey)
+            dynamic_credentials = True
+
+        if not esp_prov.send_wifi_config(obj_transport,
+                                         obj_security,
+                                         ssid,
+                                         passphrase):
+            if handle_retry("Sending Wi-Fi credentials to node - Failed"):
+                continue
+            return None
+        print("Sending Wi-Fi credentials to node - Successful")
+
+        if not esp_prov.apply_wifi_config(obj_transport, obj_security):
+            if handle_retry("Applying Wi-Fi config to node - Failed"):
+                continue
+            return None
+        print("Applying Wi-Fi config to node - Successful")
+
+        success, status = wait_for_wifi_connection()
+        if success:
             print("Wi-Fi Provisioning Successful.")
             return (nodeid, challenge_response_performed)
-        elif ret == 'connecting':
-            continue  # Keep waiting for connection
-        elif ret in ('disconnected', 'failed', 'unknown') or ret is None:
-            print("Wi-Fi Provisioning Failed.")
-            return None
+
+        if status in ('disconnected', 'failed', 'unknown'):
+            reason_msg = "Wi-Fi Provisioning Failed."
         else:
-            # Unexpected return value, treat as failure
-            print(f"Wi-Fi Provisioning Failed. Unexpected status: {ret}")
+            reason_msg = f"Wi-Fi Provisioning Failed. Unexpected status: {status}"
+
+        if not handle_retry(reason_msg):
             return None
-    print("Exiting Wi-Fi Provisioning.")
 
 
 if __name__ == '__main__':

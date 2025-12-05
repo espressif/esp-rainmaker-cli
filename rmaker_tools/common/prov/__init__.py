@@ -4,3 +4,4 @@
 
 from .wifi_prov import *  # noqa: F403, F401
 from .wifi_scan import *  # noqa: F403, F401
+from .wifi_ctrl import *  # noqa: F403, F401

@@ -132,8 +132,9 @@ def provision(vars=None):
             challenge_response_performed = False
         
         if node_id is None:
+            # Error message already printed by provision_device when reset fails
+            # Only log for debugging purposes
             log.error(PROVISION_FAILURE_MSG)
-            print(PROVISION_FAILURE_MSG)
             return
             
         log.info(f'Node {node_id} provisioned successfully.')

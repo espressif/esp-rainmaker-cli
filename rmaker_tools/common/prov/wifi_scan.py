@@ -57,7 +57,7 @@ def scan_start_response(security_ctx, response_data):
     resp.ParseFromString(dec_resp)
     print_verbose(security_ctx, f'ScanStart status: 0x{str(resp.status)}')
     if resp.status != 0:
-        raise RuntimeError
+        raise RuntimeError(f"ScanStart failed with status {resp.status}")
 
 
 def scan_status_request(security_ctx):
@@ -76,7 +76,7 @@ def scan_status_response(security_ctx, response_data):
     resp.ParseFromString(dec_resp)
     print_verbose(security_ctx, f'ScanStatus status: 0x{str(resp.status)}')
     if resp.status != 0:
-        raise RuntimeError
+        raise RuntimeError(f"ScanStatus failed with status {resp.status}")
     return {'finished': resp.resp_scan_status.scan_finished, 'count': resp.resp_scan_status.result_count}
 
 
@@ -98,7 +98,7 @@ def scan_result_response(security_ctx, response_data):
     resp.ParseFromString(dec_resp)
     print_verbose(security_ctx, f'ScanResult status: 0x{str(resp.status)}')
     if resp.status != 0:
-        raise RuntimeError
+        raise RuntimeError(f"ScanResult failed with status {resp.status}")
     # Use extended auth mode list from prov version (better error handling)
     authmode_str = ['Open', 'WEP', 'WPA_PSK', 'WPA2_PSK', 'WPA_WPA2_PSK',
                     'WPA2_ENTERPRISE', 'WPA3_PSK', 'WPA2_WPA3_PSK', 'WIFI_AUTH_WAPI_PSK']

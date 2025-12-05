@@ -56,8 +56,9 @@ else:
     rmaker_prov_dir = os.path.join(current_dir, '..', '..', 'rmaker_prov')
     wifi_scan_pb2 = _load_source('wifi_scan_pb2', os.path.join(rmaker_prov_dir, 'wifi_provisioning', 'python', 'wifi_scan_pb2.py'))
 
-# For wifi_ctrl_pb2, create a simple stub since it's not commonly used
-class WifiCtrlPb2:
-    pass
-
-wifi_ctrl_pb2 = WifiCtrlPb2()
+wifi_ctrl_pb2_path = os.path.join(local_ctrl_dir, 'wifi_ctrl_pb2.py')
+if os.path.exists(wifi_ctrl_pb2_path):
+    wifi_ctrl_pb2 = _load_source('wifi_ctrl_pb2', wifi_ctrl_pb2_path)
+else:
+    rmaker_prov_dir = os.path.join(current_dir, '..', '..', 'rmaker_prov')
+    wifi_ctrl_pb2 = _load_source('wifi_ctrl_pb2', os.path.join(rmaker_prov_dir, 'wifi_provisioning', 'python', 'wifi_ctrl_pb2.py'))
