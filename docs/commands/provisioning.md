@@ -14,19 +14,20 @@ Provisioning is the process of configuring a device to connect to your Wi-Fi net
 
 Before provisioning:
 1. Have the device in provisioning mode
-2. Know the device's Proof of Possession (PoP) code
+2. Know the device's Proof of Possession (PoP) code (if required by security scheme)
 
 ## Provisioning Command
 
 ### Basic Syntax
 ```bash
-esp-rainmaker-cli provision --pop <pop> [options]
+esp-rainmaker-cli provision [--pop <pop>] [options]
 ```
 
 ### Core Parameters
-- `--pop <pop>`: Proof of Possession code for the device (required)
+- `--pop <pop>`: Proof of Possession code for the device (required for Security 1, unless device supports `no_pop` capability, or provided via `--qrcode`)
 - `--transport <mode>`: Communication method (softap, ble, console)
 - `--sec_ver <version>`: Security scheme (0, 1, or 2)
+- `--qrcode <json>`: QR code payload as JSON string (extracts transport, device_name, and pop)
 
 ### Transport Modes
 
@@ -47,21 +48,31 @@ esp-rainmaker-cli provision --pop abcd1234 --transport console
 
 ## Security Schemes
 
-The CLI supports multiple security schemes:
+The CLI supports multiple security schemes. PoP requirements vary by security scheme:
+
+- **Security 0**: PoP not required (no security)
+- **Security 1**: PoP required unless device supports `no_pop` capability
+- **Security 2**: PoP not required (uses username/password instead)
 
 ### Security 0 (No Security)
 ```bash
-esp-rainmaker-cli provision --pop abcd1234 --sec_ver 0
+# PoP not required for Security 0
+esp-rainmaker-cli provision --sec_ver 0
 ```
 
 ### Security 1 (X25519 + AES-CTR + PoP) - Default
 ```bash
+# PoP required unless device supports 'no_pop' capability
 esp-rainmaker-cli provision --pop abcd1234 --sec_ver 1
+
+# If device supports 'no_pop', PoP can be omitted
+esp-rainmaker-cli provision --sec_ver 1
 ```
 
 ### Security 2 (SRP6a + AES-GCM)
 ```bash
-esp-rainmaker-cli provision --pop abcd1234 --sec_ver 2 \
+# PoP not required for Security 2 (uses username/password instead)
+esp-rainmaker-cli provision --sec_ver 2 \
   --sec2_username myuser --sec2_password mypass
 ```
 
@@ -95,11 +106,43 @@ esp-rainmaker-cli provision --pop abcd1234 \
   --sec2_password secure123
 ```
 
+### Provisioning with QR Code Payload
+```bash
+# Use QR code payload to automatically extract transport, device_name, and pop
+esp-rainmaker-cli provision \
+  --qrcode '{"ver":"v1","name":"PROV_fc9ea3","pop":"7a9d365e","transport":"ble"}' \
+  --ssid "MyWiFiNetwork" \
+  --passphrase "MyWiFiPassword"
+
+# QR code values can be overridden by explicit options
+esp-rainmaker-cli provision \
+  --qrcode '{"ver":"v1","name":"PROV_fc9ea3","pop":"7a9d365e","transport":"ble"}' \
+  --transport softap \
+  --ssid "MyWiFiNetwork" \
+  --passphrase "MyWiFiPassword"
+```
+
+### Provisioning Without PoP
+```bash
+# Security 0 - No PoP required
+esp-rainmaker-cli provision --sec_ver 0 --transport ble --device_name PROV_d76c30
+
+# Security 1 - PoP optional if device supports 'no_pop' capability
+esp-rainmaker-cli provision --sec_ver 1 --transport ble --device_name PROV_d76c30
+
+# Security 2 - No PoP required (uses username/password)
+esp-rainmaker-cli provision --sec_ver 2 \
+  --transport ble \
+  --device_name PROV_d76c30 \
+  --sec2_username myuser \
+  --sec2_password mypass
+```
+
 ## Command Line Options
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `--pop` | Proof of possession (required) | `--pop abcd1234` |
+| `--pop` | Proof of possession (required for Security 1 unless device supports `no_pop`, optional for Security 0/2, can be provided via `--qrcode`) | `--pop abcd1234` |
 | `--transport` | Transport mode: softap, ble, console | `--transport ble` |
 | `--sec_ver` | Security version: 0, 1, 2 | `--sec_ver 1` |
 | `--sec2_username` | Username for Security 2 | `--sec2_username admin` |
@@ -107,6 +150,7 @@ esp-rainmaker-cli provision --pop abcd1234 \
 | `--device_name` | BLE device name | `--device_name PROV_d76c30` |
 | `--ssid` | Wi-Fi network name | `--ssid "MyNetwork"` |
 | `--passphrase` | Wi-Fi password | `--passphrase "password"` |
+| `--qrcode` | QR code payload as JSON string. Extracts `transport`, `name` (device_name), and `pop` from the JSON. Explicit options override QR code values. | `--qrcode '{"ver":"v1","name":"PROV_fc9ea3","pop":"7a9d365e","transport":"ble"}'` |
 
 ## Provisioning Process
 
@@ -151,8 +195,10 @@ Wi-Fi Provisioning Successful
 ### Security Handshake Failed
 **Problem**: Authentication errors during setup
 **Solutions**:
-- Verify PoP code is correct
+- Verify PoP code is correct (if required for Security 1)
+- Check if device supports `no_pop` capability (for Security 1)
 - Try different security schemes (`--sec_ver 0`, `1`, or `2`)
+- For Security 2, verify username and password are correct
 - Reset device and restart provisioning
 
 ### Wi-Fi Connection Failed
@@ -170,6 +216,37 @@ Wi-Fi Provisioning Successful
 - **SoftAP**: Connect to device's Wi-Fi hotspot first
 - **Console**: Check serial port permissions and cable connection
 
+## QR Code Provisioning
+
+The `--qrcode` option allows you to pass a QR code payload directly, which automatically extracts provisioning parameters:
+
+- **`transport`**: Transport mode (softap, ble, console)
+- **`name`**: Device name (maps to `--device_name` for BLE transport)
+- **`pop`**: Proof of Possession code
+
+### How It Works
+
+1. **QR Code as Defaults**: Values from the QR code are used as defaults for `transport`, `device_name`, and `pop`
+2. **Explicit Override**: Any explicitly provided options (`--transport`, `--device_name`, `--pop`) will override the corresponding QR code values
+3. **Priority Order**: Explicit options > QR code values > Defaults
+
+### Example QR Code Format
+
+```json
+{
+  "ver": "v1",
+  "name": "PROV_fc9ea3",
+  "pop": "7a9d365e",
+  "transport": "ble"
+}
+```
+
+### Use Cases
+
+- **Quick Provisioning**: Scan QR code and pass it directly without manually extracting values
+- **Batch Provisioning**: Use QR codes from multiple devices in scripts
+- **Partial Override**: Use QR code for most values but override specific ones (e.g., change transport mode)
+
 ## Best Practices
 
 1. **Use BLE Transport**: Most reliable for modern devices
@@ -177,6 +254,7 @@ Wi-Fi Provisioning Successful
 3. **Strong Wi-Fi Passwords**: Use WPA2/WPA3 with strong passwords
 4. **Stable Environment**: Provision in area with good Wi-Fi signal
 5. **Device Reset**: If provisioning fails, reset device and retry
+6. **QR Code Option**: Use `--qrcode` for faster provisioning when QR code payload is available
 
 ## Backward Compatibility
 

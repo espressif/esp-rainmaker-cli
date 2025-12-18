@@ -359,7 +359,6 @@ def main():
     provision_parser.add_argument('--transport',
                                   type=str,
                                   choices=['softap', 'ble', 'console'],
-                                  default='softap',
                                   help='Transport mode for provisioning:\n'
                                        '  softap  - SoftAP + HTTP (default)\n'
                                        '  ble     - Bluetooth Low Energy\n'
@@ -394,6 +393,13 @@ def main():
     provision_parser.add_argument('--passphrase',
                                   type=str,
                                   help='WiFi password')
+    
+    provision_parser.add_argument('--qrcode',
+                                  type=str,
+                                  help='QR code payload as JSON string\n'
+                                       '(e.g., \'{"ver":"v1","name":"PROV_fc9ea3","pop":"7a9d365e","transport":"ble"}\')\n'
+                                       'Values from QR code will be used as defaults, but can be overridden\n'
+                                       'by explicit --transport, --device_name, and --pop options')
     
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)

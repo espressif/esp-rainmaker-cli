@@ -53,6 +53,16 @@ def provision(vars=None):
     try:
         log.info('Starting device provisioning...')
         
+        # Parse QR code if provided
+        qrcode_data = {}
+        if vars.get('qrcode'):
+            try:
+                qrcode_json = vars.get('qrcode')
+                qrcode_data = json.loads(qrcode_json)
+                log.debug(f'Parsed QR code data: {qrcode_data}')
+            except json.JSONDecodeError as json_err:
+                raise ValueError(f"Invalid JSON in --qrcode: {json_err}")
+        
         # Create session with profile support
         curr_session = get_session_with_profile(vars)
         
@@ -62,11 +72,36 @@ def provision(vars=None):
         log.debug('User session is initialized for the user ' + userid)
         
         # Extract provisioning parameters
+        # Use QR code values as defaults, but allow explicit options to override
         # Handle both positional pop and --pop flag for backward compatibility
         # Ensure pop is always a string (not None) to avoid len() errors
-        pop = vars.get('pop_flag') or vars.get('pop') or ''
+        
+        # Transport: explicit option overrides QR code, QR code overrides default
+        explicit_transport = vars.get('transport')
+        if explicit_transport:
+            # Explicitly provided, use it
+            transport_mode = explicit_transport
+        elif qrcode_data.get('transport'):
+            # No explicit value, use QR code
+            transport_mode = qrcode_data.get('transport')
+        else:
+            # No QR code, use default
+            transport_mode = 'softap'
+        
+        # Device name: explicit option overrides QR code
+        # QR code uses 'name' field, which maps to 'device_name'
+        device_name = vars.get('device_name') or qrcode_data.get('name')
+        
+        # Pop: explicit option (--pop or positional) overrides QR code
+        explicit_pop = vars.get('pop_flag') or vars.get('pop')
+        if explicit_pop:
+            pop = explicit_pop
+        elif qrcode_data.get('pop'):
+            pop = qrcode_data.get('pop')
+        else:
+            pop = ''
         pop = pop if pop is not None else ''
-        transport_mode = vars.get('transport', 'softap')
+        
         sec_ver = vars.get('sec_ver')
         
         # Validate pop requirement based on security version
@@ -74,11 +109,13 @@ def provision(vars=None):
         # This will be checked after connecting to the device in provision_device()
         # For sec_ver 0 and 2, pop is not needed
         # Only require pop upfront if sec_ver is not explicitly set (auto-detect case)
+        # since we don't know which security version will be used
         if not pop and sec_ver is None:
-            raise ValueError("Proof of possession (pop) is required. Use --pop or provide as positional argument.")
+            raise ValueError("Proof of possession (pop) may be required depending on security scheme. "
+                           "Use --pop, provide via --qrcode, or specify --sec_ver to skip pop requirement "
+                           "(Security 0 and 2 don't require pop).")
         sec2_username = vars.get('sec2_username', '')
         sec2_password = vars.get('sec2_password', '')
-        device_name = vars.get('device_name')
         ssid = vars.get('ssid')
         passphrase = vars.get('passphrase')
         
