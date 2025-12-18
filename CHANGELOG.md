@@ -2,6 +2,12 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.8.0] - 18-Dec-2025
+### Added
+- Retry support for WiFi provisioning - allows users to retry provisioning on failure,
+  resets device state machine using prov-ctrl endpoint, and sends new credentials on the same secure session
+- Support for passing QR code payload to provisioning command
+
 ## [1.7.0] - 11-Nov-2025
 ### Added
 - BLE Transport support for provisioning

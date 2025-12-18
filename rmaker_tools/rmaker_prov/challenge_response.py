@@ -135,11 +135,20 @@ def initiate_challenge_mapping(session):
     try:
         log.info("Initiating challenge-response mapping with cloud...")
         
+        # Get fresh token (will refresh if expired)
+        # This ensures we always have a valid token even if it expired
+        # between session creation and this API call
+        try:
+            id_token = session.config.get_access_token()
+        except Exception:
+            # Fallback to stored token if get_access_token fails
+            id_token = session.id_token
+        
         # Prepare request
         url = f"{session.config.get_host()}user/nodes/mapping/initiate"
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': session.id_token
+            'Authorization': id_token
         }
         
         # Request body with timeout
@@ -187,6 +196,15 @@ def verify_challenge_response(session, request_id, node_id, challenge_response_b
     try:
         log.info("Verifying challenge response with cloud...")
         
+        # Get fresh token (will refresh if expired)
+        # This ensures we always have a valid token even if it expired
+        # between session creation and this API call
+        try:
+            id_token = session.config.get_access_token()
+        except Exception:
+            # Fallback to stored token if get_access_token fails
+            id_token = session.id_token
+        
         # Convert binary response to hex string (lowercase)
         challenge_response_hex = challenge_response_bytes.hex().lower()
         log.debug(f"Challenge response hex length: {len(challenge_response_hex)} chars")
@@ -195,7 +213,7 @@ def verify_challenge_response(session, request_id, node_id, challenge_response_b
         url = f"{session.config.get_host()}user/nodes/mapping/verify"
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': session.id_token
+            'Authorization': id_token
         }
         
         # Request body

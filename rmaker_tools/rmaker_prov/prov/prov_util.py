@@ -370,3 +370,27 @@ def get_wifi_config(tp, sec):
     except RuntimeError as e:
         on_except(e)
         return None
+
+
+def ctrl_reset(tp, sec):
+    """Send CtrlReset command over prov-ctrl endpoint."""
+    try:
+        message = prov.ctrl_reset_request(sec)
+        response = tp.send_data('prov-ctrl', message)
+        prov.ctrl_reset_response(sec, response)
+        return True
+    except RuntimeError as e:
+        on_except(e)
+        return False
+
+
+def ctrl_reprov(tp, sec):
+    """Send CtrlReprov command over prov-ctrl endpoint."""
+    try:
+        message = prov.ctrl_reprov_request(sec)
+        response = tp.send_data('prov-ctrl', message)
+        prov.ctrl_reprov_response(sec, response)
+        return True
+    except RuntimeError as e:
+        on_except(e)
+        return False
