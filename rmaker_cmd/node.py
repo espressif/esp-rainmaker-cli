@@ -245,8 +245,8 @@ def get_node_details(vars=None):
             _print_node_details(node_id, node_info, idx)
             print()  # Add empty line between nodes
     except Exception as e:
-        log.error(e)
-        print(f"Error retrieving node details: {str(e)}")
+        error_msg = f"Error retrieving node details: {str(e)}"
+        log.error(error_msg)
 
 def _print_node_details(node_id, node_info, index=None):
     """
@@ -455,8 +455,8 @@ def get_schedules(vars=None):
             print(_format_schedule(schedule))
 
     except Exception as e:
-        log.error(e)
-        print(f"Error retrieving schedules: {str(e)}")
+        error_msg = f"Error retrieving schedules: {str(e)}"
+        log.error(error_msg)
 
 def set_schedule(vars=None):
     """
@@ -580,8 +580,8 @@ def set_schedule(vars=None):
                         print(f'  - {node_id}: {description}')
 
     except Exception as e:
-        log.error(e)
-        print(f"Error setting schedule: {str(e)}")
+        error_msg = f"Error setting schedule: {str(e)}"
+        log.error(error_msg)
 
 def _check_user_input(node_ids_str):
     log.debug("Check user input....")
@@ -1226,13 +1226,14 @@ def set_params(vars=None):
             result = node.Node.set_node_params_multiple(node_params_list, s)
 
     except SSLError:
-        log.error(SSLError())
+        error_msg = "SSL verification failed"
+        log.error(error_msg)
     except NetworkError as conn_err:
-        print(conn_err)
         log.warn(conn_err)
+        print(conn_err)
     except Exception as set_params_err:
-        log.error(set_params_err)
-        print(f"Error setting parameters: {set_params_err}")
+        error_msg = f"Error setting parameters: {set_params_err}"
+        log.error(error_msg)
     else:
         # Provide detailed feedback based on results
         if len(node_ids) == 1:
@@ -1337,10 +1338,11 @@ def get_params(vars=None):
             params = n.get_node_params()
 
     except SSLError:
-        log.error(SSLError())
+        error_msg = "SSL verification failed"
+        log.error(error_msg)
     except NetworkError as conn_err:
-        print(conn_err)
         log.warn(conn_err)
+        print(conn_err)
     except Exception as get_params_err:
         log.error(get_params_err)
     else:
@@ -1456,5 +1458,187 @@ def ota_upgrade(vars=None):
             print(json.dumps(response, indent=4))
     except Exception as e:
         log.error(e)
+    return
+
+def raw_api_call(vars=None):
+    """
+    Make raw API calls to RainMaker backend
+
+    :param vars: `method` as key - HTTP method (GET, POST, PUT, DELETE, PATCH)
+                 `api` as key - API endpoint path
+                 `query_params` as key - Query parameters string (optional)
+                 `body` as key - Request body JSON string (optional)
+                 `body_file` as key - Path to file containing request body JSON (optional)
+                 `profile` as key - Profile to use for the operation
+    :type vars: dict | None
+
+    :raises Exception: If there is an HTTP issue while making the API call
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        method = vars.get('method', '').upper()
+        api_path = vars.get('api', '')
+        query_params = vars.get('query_params', None)
+        body_str = vars.get('body', None)
+        body_file = vars.get('body_file', None)
+
+        if not method or not api_path:
+            log.error("Method and API path are required")
+            return
+
+        # Check if both --body and --body-file are provided
+        if body_str and body_file:
+            error_msg = "Cannot specify both --body and --body-file. Use only one."
+            log.error(error_msg)
+            return
+
+        # Read body from file if --body-file is provided
+        if body_file:
+            try:
+                with open(body_file, 'r', encoding='utf-8') as f:
+                    body_str = f.read()
+                log.info(f"Read body from file: {body_file}")
+            except FileNotFoundError:
+                error_msg = f"Body file not found: {body_file}"
+                log.error(error_msg)
+                return
+            except IOError as e:
+                error_msg = f"Error reading body file: {e}"
+                log.error(error_msg)
+                return
+
+        # Get session
+        s = get_session_with_profile(vars or {})
+
+        # Construct URL
+        # get_host() returns something like "https://api.rainmaker.espressif.com/v1/"
+        # If api_path starts with /v1/, remove it since get_host() already includes v1/
+        api_path = api_path.lstrip('/')
+        if api_path.startswith('v1/'):
+            api_path = api_path[3:]  # Remove 'v1/' prefix
+
+        base_url = s.config.get_host()
+
+        # Build full URL
+        full_url = base_url + api_path
+
+        # Add query parameters if provided
+        if query_params:
+            # Ensure query_params doesn't start with ?
+            query_params = query_params.lstrip('?')
+            full_url += '?' + query_params
+
+        print(f"Request URL: {full_url}")
+
+        log.info(f"Making {method} request to: {full_url}")
+        if body_str:
+            log.debug(f"Request body: {body_str}")
+
+        # Parse body if provided
+        body_json = None
+        if body_str:
+            try:
+                body_json = json.loads(body_str)
+            except json.JSONDecodeError as e:
+                body_source = f"--body-file ({body_file})" if body_file else "--body"
+                error_msg = f"Invalid JSON in {body_source}: {e}"
+                log.error(error_msg)
+                return
+
+        # Make the request
+        try:
+            if method == 'GET':
+                response = requests.get(
+                    url=full_url,
+                    headers=s.request_header,
+                    verify=configmanager.CERT_FILE,
+                    timeout=(5.0, 5.0)
+                )
+            elif method == 'POST':
+                response = requests.post(
+                    url=full_url,
+                    headers=s.request_header,
+                    json=body_json,
+                    verify=configmanager.CERT_FILE,
+                    timeout=(5.0, 5.0)
+                )
+            elif method == 'PUT':
+                response = requests.put(
+                    url=full_url,
+                    headers=s.request_header,
+                    json=body_json,
+                    verify=configmanager.CERT_FILE,
+                    timeout=(5.0, 5.0)
+                )
+            elif method == 'DELETE':
+                response = requests.delete(
+                    url=full_url,
+                    headers=s.request_header,
+                    json=body_json,
+                    verify=configmanager.CERT_FILE,
+                    timeout=(5.0, 5.0)
+                )
+            elif method == 'PATCH':
+                response = requests.patch(
+                    url=full_url,
+                    headers=s.request_header,
+                    json=body_json,
+                    verify=configmanager.CERT_FILE,
+                    timeout=(5.0, 5.0)
+                )
+            else:
+                error_msg = f"Unsupported HTTP method: {method}"
+                log.error(error_msg)
+                return
+
+            log.debug(f"Response status: {response.status_code}")
+            log.debug(f"Response headers: {response.headers}")
+            log.debug(f"Response body: {response.text}")
+
+            # Print status code
+            print(f"Status Code: {response.status_code}")
+
+            # Print response
+            try:
+                response_json = response.json()
+                print(json.dumps(response_json, indent=4))
+            except json.JSONDecodeError:
+                # If not JSON, print as text
+                print("Response (text):")
+                print(response.text)
+
+            # Raise for status to handle errors
+            response.raise_for_status()
+
+        except requests.exceptions.HTTPError as http_err:
+            error_msg = f"HTTP error: {http_err}"
+            if hasattr(http_err.response, 'text'):
+                try:
+                    error_json = http_err.response.json()
+                    error_details = json.dumps(error_json, indent=4)
+                    error_msg += f"\nError response: {error_details}"
+                except:
+                    error_msg += f"\nError response: {http_err.response.text}"
+            log.error(error_msg)
+        except requests.exceptions.SSLError:
+            error_msg = "SSL verification failed"
+            log.error(error_msg)
+        except requests.exceptions.ConnectionError:
+            error_msg = "Failed to connect to server"
+            log.error(error_msg)
+        except requests.exceptions.Timeout:
+            error_msg = "Request timed out"
+            log.error(error_msg)
+        except Exception as e:
+            error_msg = f"Request failed: {e}"
+            log.error(error_msg)
+
+    except Exception as e:
+        error_msg = f"Raw API call failed: {e}"
+        log.error(error_msg)
+        import traceback
+        traceback.print_exc()
     return
 

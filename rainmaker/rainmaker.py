@@ -761,6 +761,32 @@ def main():
     add_profile_argument(group_list_nodes_parser)
     group_list_nodes_parser.set_defaults(func=group_list_nodes)
 
+    # Raw API command
+    raw_api_parser = subparsers.add_parser('raw-api',
+                                          help='Make raw API calls to RainMaker backend',
+                                          description='Make arbitrary API calls to RainMaker backend. '
+                                                    'Useful for testing and debugging.')
+    raw_api_parser.add_argument('--method',
+                               type=str,
+                               choices=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+                               required=True,
+                               help='HTTP method (GET, POST, PUT, DELETE, PATCH)')
+    raw_api_parser.add_argument('--api',
+                               type=str,
+                               required=True,
+                               help='API endpoint path (e.g., /v1/user/nodes or user/nodes)')
+    raw_api_parser.add_argument('--query-params',
+                               type=str,
+                               help='Query parameters (e.g., node_details=true&node_id=xyz)')
+    raw_api_parser.add_argument('--body',
+                               type=str,
+                               help='Request body (JSON string)')
+    raw_api_parser.add_argument('--body-file',
+                               type=str,
+                               help='Path to file containing request body (JSON)')
+    add_profile_argument(raw_api_parser)
+    raw_api_parser.set_defaults(func=raw_api_call)
+
     args = parser.parse_args()
 
     if args.func is not None:
