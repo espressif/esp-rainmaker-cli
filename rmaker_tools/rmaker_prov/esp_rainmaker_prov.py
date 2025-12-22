@@ -163,7 +163,7 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
 
 def provision_device(transport_mode, pop, userid, secretkey,
                      ssid=None, passphrase=None, security_version=None,
-                     sec2_username='', sec2_password='', device_name=None, session=None):
+                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False):
     """
     Wi-Fi Provision a device
 
@@ -208,6 +208,9 @@ def provision_device(transport_mode, pop, userid, secretkey,
 
     :param session: Authenticated session object for challenge-response
     :type session: object, optional
+
+    :param no_retry: If True, exit immediately if prov-ctrl succeeds without prompting for retry
+    :type no_retry: bool, optional
 
     :return: nodeid (Node Identifier) on Success, None on Failure
     :rtype: str | None
@@ -337,6 +340,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
         print("No session provided, proceeding with traditional flow")
 
     dynamic_credentials = not bool(ssid and passphrase)
+    prov_ctrl_succeeded = False  # Track if prov-ctrl reset succeeded
 
     def prompt_yes_no(prompt, default=False):
         while True:
@@ -350,22 +354,26 @@ def provision_device(transport_mode, pop, userid, secretkey,
             print('Please respond with yes or no (y/n).')
 
     def request_device_reset():
+        nonlocal prov_ctrl_succeeded
         # Try reset silently - only show messages if it succeeds
         try:
             reset_ok = esp_prov.ctrl_reset(obj_transport, obj_security)
         except RuntimeError as err:
+            prov_ctrl_succeeded = False
             return False
 
         if not reset_ok:
+            prov_ctrl_succeeded = False
             return False
 
         # Only show message if reset succeeded
         print('Device reset via prov-ctrl successful.')
+        prov_ctrl_succeeded = True
         time.sleep(2)
         return True
 
     def handle_retry(reason_msg):
-        nonlocal ssid, passphrase, dynamic_credentials
+        nonlocal ssid, passphrase, dynamic_credentials, prov_ctrl_succeeded
         if reason_msg:
             print(reason_msg)
         
@@ -373,12 +381,21 @@ def provision_device(transport_mode, pop, userid, secretkey,
         if not request_device_reset():
             # If reset failed, print error message and exit without offering retry
             # Don't mention prov-ctrl since it failed silently
+            prov_ctrl_succeeded = False
             print('Provisioning Failed. Reset your board to factory defaults and retry.')
+            return False
+        
+        # If --no-retry is set and reset succeeded, exit with message
+        # Don't show factory defaults message since prov-ctrl succeeded
+        if no_retry:
+            print('Device is reset to provisioning. Please try again')
             return False
         
         # Only offer retry if reset succeeded
         if not prompt_yes_no('Would you like to retry provisioning? [y/N]: '):
-            print('Provisioning Failed. Reset your board to factory defaults and retry.')
+            # User declined retry, but prov-ctrl succeeded, so don't ask to reset to factory defaults
+            # Since prov-ctrl succeeded, device is already reset to provisioning state
+            print('Provisioning cancelled.')
             return False
 
         # If we have an SSID, offer to retry with the same SSID but new password
@@ -444,13 +461,15 @@ def provision_device(transport_mode, pop, userid, secretkey,
                                          passphrase):
             if handle_retry("Sending Wi-Fi credentials to node - Failed"):
                 continue
-            return None
+            # Return tuple with prov_ctrl_succeeded flag
+            return (None, False, prov_ctrl_succeeded)
         print("Sending Wi-Fi credentials to node - Successful")
 
         if not esp_prov.apply_wifi_config(obj_transport, obj_security):
             if handle_retry("Applying Wi-Fi config to node - Failed"):
                 continue
-            return None
+            # Return tuple with prov_ctrl_succeeded flag
+            return (None, False, prov_ctrl_succeeded)
         print("Applying Wi-Fi config to node - Successful")
 
         success, status = wait_for_wifi_connection()
@@ -464,7 +483,8 @@ def provision_device(transport_mode, pop, userid, secretkey,
             reason_msg = f"Wi-Fi Provisioning Failed. Unexpected status: {status}"
 
         if not handle_retry(reason_msg):
-            return None
+            # Return tuple with prov_ctrl_succeeded flag
+            return (None, False, prov_ctrl_succeeded)
 
 
 if __name__ == '__main__':

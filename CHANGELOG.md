@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.8.1] - 19-Dec-2025
+### Added
+- An option --no-retry for provisioning, to avoid user-interactive prompts asking to retry in case of failures
+
 ## [1.8.0] - 18-Dec-2025
 ### Added
 - Retry support for WiFi provisioning - allows users to retry provisioning on failure,
