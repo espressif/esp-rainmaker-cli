@@ -40,6 +40,7 @@ def provision(vars=None):
                  - `ssid`: WiFi SSID
                  - `passphrase`: WiFi password
                  - `profile`: Profile to use for the operation
+                 - `no_retry`: If True, exit immediately if prov-ctrl succeeds without prompting for retry
     :type vars: dict | None
 
     :raises Exception: If there is an issue with provisioning or adding device
@@ -152,7 +153,8 @@ def provision(vars=None):
                 sec2_username=sec2_username,
                 sec2_password=sec2_password,
                 device_name=device_name,
-                session=curr_session
+                session=curr_session,
+                no_retry=vars.get('no_retry', False)
             )
         except RuntimeError as claim_err:
             # Handle claim requirement error specifically
@@ -161,14 +163,28 @@ def provision(vars=None):
             print(f'❌ Error: {error_msg}')
             sys.exit(1)
         
-        # Handle tuple return (node_id, challenge_response_performed)
+        # Handle tuple return
+        # Can be: (node_id, challenge_response_performed) on success
+        # Or: (None, False, prov_ctrl_succeeded) on failure after prov-ctrl attempt
+        # Or: None on early failure (before prov-ctrl attempt)
+        prov_ctrl_succeeded = False
         if isinstance(result, tuple):
-            node_id, challenge_response_performed = result
+            if len(result) == 3:
+                # Failure case with prov_ctrl_succeeded flag
+                node_id, challenge_response_performed, prov_ctrl_succeeded = result
+            else:
+                # Success case
+                node_id, challenge_response_performed = result
         else:
             node_id = result
             challenge_response_performed = False
         
         if node_id is None:
+            # If prov-ctrl succeeded, don't show factory defaults message
+            # (whether --no-retry was used or user declined retry)
+            if prov_ctrl_succeeded:
+                # Message already printed by provision_device
+                return
             # Error message already printed by provision_device when reset fails
             # Only log for debugging purposes
             log.error(PROVISION_FAILURE_MSG)

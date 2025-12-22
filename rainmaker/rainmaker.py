@@ -401,6 +401,10 @@ def main():
                                        'Values from QR code will be used as defaults, but can be overridden\n'
                                        'by explicit --transport, --device_name, and --pop options')
     
+    provision_parser.add_argument('--no-retry',
+                                  action='store_true',
+                                  help='Exit immediately on provisioning failure without prompting for retry')
+    
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
 
