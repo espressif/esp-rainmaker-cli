@@ -38,6 +38,16 @@ def print_verbose(security_ctx, data: str) -> None:
 def _make_ctrl_payload(msg_type):
     payload = proto.wifi_ctrl_pb2.WiFiCtrlPayload()
     payload.msg = msg_type
+    # Set the appropriate oneof field based on message type
+    # This makes the message structure explicit and unambiguous
+    if msg_type == proto.wifi_ctrl_pb2.TypeCmdCtrlReset:
+        payload.cmd_ctrl_reset.CopyFrom(proto.wifi_ctrl_pb2.CmdCtrlReset())
+    elif msg_type == proto.wifi_ctrl_pb2.TypeRespCtrlReset:
+        payload.resp_ctrl_reset.CopyFrom(proto.wifi_ctrl_pb2.RespCtrlReset())
+    elif msg_type == proto.wifi_ctrl_pb2.TypeCmdCtrlReprov:
+        payload.cmd_ctrl_reprov.CopyFrom(proto.wifi_ctrl_pb2.CmdCtrlReprov())
+    elif msg_type == proto.wifi_ctrl_pb2.TypeRespCtrlReprov:
+        payload.resp_ctrl_reprov.CopyFrom(proto.wifi_ctrl_pb2.RespCtrlReprov())
     return payload
 
 
