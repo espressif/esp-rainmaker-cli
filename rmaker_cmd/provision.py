@@ -111,7 +111,9 @@ def provision(vars=None):
         # For sec_ver 0 and 2, pop is not needed
         # Only require pop upfront if sec_ver is not explicitly set (auto-detect case)
         # since we don't know which security version will be used
-        if not pop and sec_ver is None:
+        # EXCEPTION: For on-network transport, we discover security info via mDNS/version endpoint
+        # so we can defer the PoP requirement check until after discovery
+        if not pop and sec_ver is None and transport_mode != 'on-network':
             raise ValueError("Proof of possession (pop) may be required depending on security scheme. "
                            "Use --pop, provide via --qrcode, or specify --sec_ver to skip pop requirement "
                            "(Security 0 and 2 don't require pop).")
@@ -138,8 +140,69 @@ def provision(vars=None):
                 print('Scanning for BLE devices... Make sure your device is in provisioning mode.')
         elif transport_mode == 'console':
             print('Using console transport. Make sure device is connected to serial port.')
+        elif transport_mode == 'on-network':
+            # On-network challenge-response mapping (no WiFi provisioning needed)
+            log.info('Using on-network transport for challenge-response mapping')
+            try:
+                from rmaker_tools.rmaker_prov.on_network_chal_resp import discover_and_map_device
+            except ImportError as e:
+                log.error(f"Failed to import on-network module: {e}")
+                print("❌ Error: On-network transport requires additional dependencies.")
+                print("   Install with: pip install zeroconf")
+                sys.exit(1)
+
+            print('Discovering devices on local network...')
+            device_ip = vars.get('device_ip')
+            device_host = vars.get('device_host')
+            device_port = vars.get('device_port', 80) or 80
+            discovery_timeout = vars.get('discovery_timeout', 5.0) or 5.0
+
+            # device_ip takes precedence over device_host
+            # device_host is useful for local control where hostname is <node_id>.local
+            if not device_ip and device_host:
+                log.info(f'Using device hostname: {device_host}')
+                device_ip = device_host  # Pass hostname as address, will be resolved
+
+            # Determine disable_chal_resp: default True for on-network transport
+            # User can override with --no-disable-chal-resp
+            if 'disable_chal_resp' in vars:
+                disable_chal_resp = vars.get('disable_chal_resp')
+            else:
+                # User didn't specify either flag, use transport-specific default
+                disable_chal_resp = True  # Default True for on-network
+
+            success, node_id = discover_and_map_device(
+                session=curr_session,
+                pop=pop,
+                sec2_username=sec2_username,
+                sec2_password=sec2_password,
+                device_name=device_name,
+                device_ip=device_ip,
+                device_port=device_port,
+                sec_ver_override=sec_ver,
+                discovery_timeout=discovery_timeout,
+                interactive=True,
+                disable_on_success=disable_chal_resp
+            )
+
+            if success and node_id:
+                log.info(f'On-network mapping completed for node: {node_id}')
+                print(f'✅ Node {node_id} mapped to your account successfully!')
+                return
+            else:
+                # Error details already logged by on_network_chal_resp module
+                print('❌ On-network challenge-response mapping failed')
+                sys.exit(1)
 
         log.info(f'Provisioning via {transport_mode.upper()} transport')
+
+        # Determine disable_chal_resp: default False for BLE/SoftAP transports
+        # User can override with --disable-chal-resp
+        if 'disable_chal_resp' in vars:
+            disable_chal_resp = vars.get('disable_chal_resp')
+        else:
+            # User didn't specify either flag, use transport-specific default
+            disable_chal_resp = False  # Default False for BLE/SoftAP (allows retry if provisioning fails)
 
         # Call the provisioning function with all parameters including session
         try:
@@ -156,7 +219,8 @@ def provision(vars=None):
                 device_name=device_name,
                 session=curr_session,
                 no_retry=vars.get('no_retry', False),
-                no_wifi=no_wifi
+                no_wifi=no_wifi,
+                disable_chal_resp=disable_chal_resp
             )
         except RuntimeError as claim_err:
             # Handle claim requirement error specifically

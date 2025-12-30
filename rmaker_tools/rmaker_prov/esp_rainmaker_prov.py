@@ -163,7 +163,7 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
 
 def provision_device(transport_mode, pop, userid, secretkey,
                      ssid=None, passphrase=None, security_version=None,
-                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False, no_wifi=False):
+                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False, no_wifi=False, disable_chal_resp=False):
     """
     Wi-Fi Provision a device
 
@@ -215,6 +215,11 @@ def provision_device(transport_mode, pop, userid, secretkey,
     :param no_wifi: If True, skip WiFi provisioning and only perform challenge-response mapping.
                     Device must support challenge-response capability, otherwise an error is raised.
     :type no_wifi: bool, optional
+
+    :param disable_chal_resp: If True, disable challenge-response on device after successful mapping.
+                               Default is False for BLE/SoftAP (allows retry if provisioning fails).
+                               On-network flows typically set this to True.
+    :type disable_chal_resp: bool, optional
 
     :return: nodeid (Node Identifier) on Success, None on Failure
     :rtype: str | None
@@ -329,7 +334,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
             if version_response and challenge_response.has_challenge_response_capability(version_response):
                 print("Device supports challenge-response, initiating user-node association...")
                 success, nodeid = challenge_response.perform_challenge_response_flow(
-                    obj_transport, obj_security, session)
+                    obj_transport, obj_security, session, disable_on_success=disable_chal_resp)
                 if not success:
                     print("Challenge-response user-node association failed")
                     return None

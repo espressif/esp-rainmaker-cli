@@ -358,11 +358,12 @@ def main():
 
     provision_parser.add_argument('--transport',
                                   type=str,
-                                  choices=['softap', 'ble', 'console'],
+                                  choices=['softap', 'ble', 'console', 'on-network'],
                                   help='Transport mode for provisioning:\n'
-                                       '  softap  - SoftAP + HTTP (default)\n'
-                                       '  ble     - Bluetooth Low Energy\n'
-                                       '  console - Serial console')
+                                       '  softap     - SoftAP + HTTP (default)\n'
+                                       '  ble        - Bluetooth Low Energy\n'
+                                       '  console    - Serial console\n'
+                                       '  on-network - On-network challenge-response mapping via mDNS')
 
     provision_parser.add_argument('--sec_ver',
                                   type=int,
@@ -410,6 +411,44 @@ def main():
                                   action='store_true',
                                   help='Skip WiFi provisioning and only perform challenge-response user-node mapping.\n'
                                        'Device must support challenge-response capability, otherwise an error is raised.')
+
+    # On-network transport specific arguments
+    provision_parser.add_argument('--device-ip',
+                                  dest='device_ip',
+                                  type=str,
+                                  help='Device IP address for on-network transport (bypasses mDNS discovery)')
+
+    provision_parser.add_argument('--device-host',
+                                  dest='device_host',
+                                  type=str,
+                                  help='Device hostname for on-network transport (e.g., <node_id>.local)\n'
+                                       'Useful for local control where hostname is predictable.\n'
+                                       'Takes precedence over mDNS discovery if specified.')
+
+    provision_parser.add_argument('--device-port',
+                                  dest='device_port',
+                                  type=int,
+                                  default=80,
+                                  help='Device HTTP port for on-network transport (default: 80)')
+
+    provision_parser.add_argument('--discovery-timeout',
+                                  dest='discovery_timeout',
+                                  type=float,
+                                  default=5.0,
+                                  help='mDNS discovery timeout in seconds for on-network transport (default: 5.0)')
+
+    provision_parser.add_argument('--disable-chal-resp',
+                                  dest='disable_chal_resp',
+                                  action='store_true',
+                                  help='Disable challenge-response on device after successful mapping.\n'
+                                       'Default: True for on-network transport, False for BLE/SoftAP.\n'
+                                       'Use --no-disable-chal-resp to override the default.')
+
+    provision_parser.add_argument('--no-disable-chal-resp',
+                                  dest='disable_chal_resp',
+                                  action='store_false',
+                                  help='Do NOT disable challenge-response on device after successful mapping.\n'
+                                       'Overrides the transport-specific default behavior.')
 
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
