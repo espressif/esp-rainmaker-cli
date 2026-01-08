@@ -94,6 +94,7 @@ The CLI supports the following main commands:
 ### Other Operations
 
 * `getmqtthost` - Get the MQTT Host URL to be used in the firmware
+* `raw-api` - Make authenticated raw API calls to RainMaker backend for testing/debugging
 
 ## Detailed Documentation
 
@@ -108,6 +109,7 @@ For detailed documentation on specific commands, refer to the following files:
 * [Provisioning](./commands/provisioning.md)
 * [Command Response](./commands/command_response.md)
 * [ESP Local Control](./commands/local_control.md)
+* [Raw API](./commands/raw_api.md)
 
 ## Examples
 
