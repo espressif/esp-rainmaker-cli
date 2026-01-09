@@ -371,6 +371,16 @@ class Node:
             'operation': operation
         }
 
+        # Get fresh token (will refresh if expired) before making API call
+        # This prevents "Unauthorized" errors if token expired during provisioning
+        try:
+            fresh_token = self.config.get_access_token()
+            request_header = {'content-type': 'application/json',
+                             'Authorization': fresh_token}
+        except Exception as token_err:
+            log.debug(f"Failed to get fresh token, using stored token: {token_err}")
+            request_header = self.request_header
+
         request_url = self.config.get_host() + path
         try:
             log.debug("User node mapping request url : " + request_url)
@@ -378,7 +388,7 @@ class Node:
                       str(request_payload))
             response = requests.put(url=request_url,
                                     data=json.dumps(request_payload),
-                                    headers=self.request_header,
+                                    headers=request_header,
                                     verify=configmanager.CERT_FILE,
                                     timeout=(5.0, 5.0))
             log.debug("User node mapping response : " + response.text)

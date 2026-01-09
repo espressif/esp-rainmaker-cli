@@ -138,6 +138,23 @@ esp-rainmaker-cli provision --sec_ver 2 \
   --sec2_password mypass
 ```
 
+### User-Node Mapping Without Wi-Fi Provisioning
+```bash
+# Perform challenge-response mapping and skip sending Wi-Fi credentials
+esp-rainmaker-cli provision --pop abcd1234 \
+  --transport ble \
+  --device_name PROV_d76c30 \
+  --no-wifi
+```
+
+Use the `--no-wifi` flag when you only need to associate a device with your account (challenge-response). When this flag is set:
+- Wi-Fi scanning and credential exchange steps are skipped.
+- You must be logged in because an authenticated session is required to complete the mapping.
+- The device must advertise the `challenge-response` capability; the CLI will raise an error if the capability is missing.
+- All other provisioning steps (security handshake and user association) continue as usual.
+
+This workflow will be useful for BLE-only cases in future, wherein the nodes will be controlled only over BLE.
+
 ## Command Line Options
 
 | Option | Description | Example |
@@ -151,6 +168,7 @@ esp-rainmaker-cli provision --sec_ver 2 \
 | `--ssid` | Wi-Fi network name | `--ssid "MyNetwork"` |
 | `--passphrase` | Wi-Fi password | `--passphrase "password"` |
 | `--qrcode` | QR code payload as JSON string. Extracts `transport`, `name` (device_name), and `pop` from the JSON. Explicit options override QR code values. | `--qrcode '{"ver":"v1","name":"PROV_fc9ea3","pop":"7a9d365e","transport":"ble"}'` |
+| `--no-wifi` | Skips Wi-Fi provisioning and performs only user-node mapping (requires authenticated session and device support for challenge-response) | `--no-wifi` |
 
 ## Provisioning Process
 

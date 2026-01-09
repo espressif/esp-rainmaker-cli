@@ -150,13 +150,30 @@ def get_transport(sel_transport, service_name):
                     def disconnect(self):
                         # Sync wrapper for async disconnect
                         if self.loop is not None:
-                            async def disconnect():
-                                await self.async_transport.disconnect()
-                            self.loop.run_until_complete(disconnect())
-                            self.loop.close()
-                            self.loop = None
+                            try:
+                                async def disconnect():
+                                    await self.async_transport.disconnect()
+                                # Check if loop is still running and not closed
+                                if not self.loop.is_closed():
+                                    self.loop.run_until_complete(disconnect())
+                            except (RuntimeError, AttributeError, Exception):
+                                # Ignore errors during cleanup (loop might be closed, etc.)
+                                pass
+                            finally:
+                                try:
+                                    if self.loop is not None and not self.loop.is_closed():
+                                        self.loop.close()
+                                except:
+                                    pass
+                                self.loop = None
                     
                     def __del__(self):
+                        # Avoid cleanup in __del__ during interpreter shutdown
+                        # as it can cause "illegal hardware instruction" errors
+                        # when native libraries (bleak) are being torn down
+                        import sys
+                        if sys.is_finalizing():
+                            return
                         try:
                             self.disconnect()
                         except:

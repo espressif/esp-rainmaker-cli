@@ -50,10 +50,10 @@ def provision(vars=None):
     """
     if vars is None:
         vars = {}
-    
+
     try:
         log.info('Starting device provisioning...')
-        
+
         # Parse QR code if provided
         qrcode_data = {}
         if vars.get('qrcode'):
@@ -63,20 +63,20 @@ def provision(vars=None):
                 log.debug(f'Parsed QR code data: {qrcode_data}')
             except json.JSONDecodeError as json_err:
                 raise ValueError(f"Invalid JSON in --qrcode: {json_err}")
-        
+
         # Create session with profile support
         curr_session = get_session_with_profile(vars)
-        
+
         # Get user credentials
         config = configmanager.Config()
         userid = config.get_user_id()
         log.debug('User session is initialized for the user ' + userid)
-        
+
         # Extract provisioning parameters
         # Use QR code values as defaults, but allow explicit options to override
         # Handle both positional pop and --pop flag for backward compatibility
         # Ensure pop is always a string (not None) to avoid len() errors
-        
+
         # Transport: explicit option overrides QR code, QR code overrides default
         explicit_transport = vars.get('transport')
         if explicit_transport:
@@ -88,11 +88,11 @@ def provision(vars=None):
         else:
             # No QR code, use default
             transport_mode = 'softap'
-        
+
         # Device name: explicit option overrides QR code
         # QR code uses 'name' field, which maps to 'device_name'
         device_name = vars.get('device_name') or qrcode_data.get('name')
-        
+
         # Pop: explicit option (--pop or positional) overrides QR code
         explicit_pop = vars.get('pop_flag') or vars.get('pop')
         if explicit_pop:
@@ -102,9 +102,9 @@ def provision(vars=None):
         else:
             pop = ''
         pop = pop if pop is not None else ''
-        
+
         sec_ver = vars.get('sec_ver')
-        
+
         # Validate pop requirement based on security version
         # For sec_ver 1, pop may be optional if device supports 'no_pop' capability
         # This will be checked after connecting to the device in provision_device()
@@ -119,10 +119,11 @@ def provision(vars=None):
         sec2_password = vars.get('sec2_password', '')
         ssid = vars.get('ssid')
         passphrase = vars.get('passphrase')
-        
+        no_wifi = vars.get('no_wifi', False)
+
         # Generate secret key for user-node mapping
         secret_key = str(uuid.uuid4())
-        
+
         # Transport-specific connection prompt
         if transport_mode == 'softap':
             try:
@@ -137,9 +138,9 @@ def provision(vars=None):
                 print('Scanning for BLE devices... Make sure your device is in provisioning mode.')
         elif transport_mode == 'console':
             print('Using console transport. Make sure device is connected to serial port.')
-        
+
         log.info(f'Provisioning via {transport_mode.upper()} transport')
-        
+
         # Call the provisioning function with all parameters including session
         try:
             result = provision_device(
@@ -154,15 +155,16 @@ def provision(vars=None):
                 sec2_password=sec2_password,
                 device_name=device_name,
                 session=curr_session,
-                no_retry=vars.get('no_retry', False)
+                no_retry=vars.get('no_retry', False),
+                no_wifi=no_wifi
             )
         except RuntimeError as claim_err:
             # Handle claim requirement error specifically
             error_msg = str(claim_err)
-            log.error(error_msg)
+            # Only print user-friendly message; log.error() would duplicate console output
             print(f'❌ Error: {error_msg}')
             sys.exit(1)
-        
+
         # Handle tuple return
         # Can be: (node_id, challenge_response_performed) on success
         # Or: (None, False, prov_ctrl_succeeded) on failure after prov-ctrl attempt
@@ -178,7 +180,7 @@ def provision(vars=None):
         else:
             node_id = result
             challenge_response_performed = False
-        
+
         if node_id is None:
             # If prov-ctrl succeeded, don't show factory defaults message
             # (whether --no-retry was used or user declined retry)
@@ -189,16 +191,19 @@ def provision(vars=None):
             # Only log for debugging purposes
             log.error(PROVISION_FAILURE_MSG)
             return
-            
-        log.info(f'Node {node_id} provisioned successfully.')
-        print(f'✅ Node {node_id} provisioned successfully!')
-        
+
         # Skip node mapping if challenge-response was used (already added synchronously)
         if challenge_response_performed:
             log.info('Node already added to account via challenge-response flow')
-            print(f'✅ Node added to your account successfully!')
+            # Success message already printed in provision_device() after challenge-response
+            # For --no-wifi: WiFi provisioning was skipped, return here
+            # For regular flow: WiFi provisioning already completed in provision_device(),
+            # and its success/error messages were already printed, so return here
             return
-        
+
+        log.info(f'Node {node_id} provisioned successfully.')
+        print(f'✅ Node {node_id} provisioned successfully!')
+
         # Add node to user account (traditional flow requires polling)
         try:
             log.info('Adding node to user account...')
@@ -208,7 +213,7 @@ def provision(vars=None):
                 print(f'⚠️  Warning: Node provisioned but failed to add to account')
                 log.warning('add_user_node_mapping returned None')
                 return
-            
+
             # Poll for mapping status
             log.info(f'Polling for mapping status with request_id: {request_id}')
             print('Waiting for node mapping confirmation...')
@@ -216,21 +221,21 @@ def provision(vars=None):
             poll_interval = 5  # Poll every 5 seconds
             start_time = time.time()
             poll_count = 0
-            
+
             while True:
                 try:
                     status = node_obj.get_mapping_status(request_id)
                     poll_count += 1
                     elapsed_time = int(time.time() - start_time)
-                    
+
                     # Show periodic status updates
                     if status:
                         print(f'Mapping status: {status} (elapsed: {elapsed_time}s)')
                     else:
                         print(f'Checking mapping status... (elapsed: {elapsed_time}s)')
-                    
+
                     log.debug(f'Mapping status (poll #{poll_count}): {status}')
-                    
+
                     if status == 'confirmed':
                         log.info('Node mapping confirmed successfully')
                         print(f'✅ Node added to your account successfully!')
@@ -270,7 +275,7 @@ def provision(vars=None):
                             sys.exit(1)
                         time.sleep(poll_interval)
                         continue
-                        
+
                 except (NetworkError, RequestTimeoutError) as poll_err:
                     elapsed_time = int(time.time() - start_time)
                     log.debug(f'Error while polling mapping status: {poll_err}, retrying...')
@@ -286,15 +291,16 @@ def provision(vars=None):
                     log.debug(f'Unexpected error while polling mapping status: {poll_err}')
                     print(f'❌ Error: Failed to check node mapping status: {poll_err}')
                     sys.exit(1)
-            
+
         except Exception as add_node_err:
-            log.error(f'Failed to add node to user account: {add_node_err}')
+            error_msg = f'Failed to add node to user account: {add_node_err}'
+            log.error(error_msg)
             print(f'⚠️  Warning: Node provisioned but failed to add to account: {add_node_err}')
-        
+
     except KeyboardInterrupt:
         print("\nProvisioning cancelled by user.")
         sys.exit(0)
     except Exception as provision_err:
-        log.error(f"Provisioning failed: {provision_err}")
-        print(f"❌ Provisioning failed: {provision_err}")
+        error_msg = f"Provisioning failed: {provision_err}"
+        log.error(error_msg)
         sys.exit(1)
