@@ -13,3 +13,4 @@ esp-secure-cert-tool==1.0.1
 setuptools
 esp_idf_nvs_partition_gen>=0.1.6
 bleak>=0.20.0
+zeroconf>=0.131.0
