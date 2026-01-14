@@ -2,6 +2,11 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.9.0] - 14-Jan-2025
+### Added
+- Support for on-network user-node mapping via the "provision" command for scenarios wherein the RainMaker node is already
+  connected to the network via some mechanism independent of RainMaker provisioning.
+
 ## [1.8.2] - 08-Jan-2025
 ### Added
 - An option --no-wifi to 'provision' command to allow challenge-response based user-node mapping without Wi-Fi provisioning.
