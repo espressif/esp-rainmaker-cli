@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2018-2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
 #
+import ipaddress
 import socket
 from http.client import HTTPConnection
 from http.client import HTTPSConnection
@@ -9,18 +10,56 @@ from ..utils.convenience import str_to_bytes
 
 from .transport import Transport
 
+from typing import Tuple
+
+
+def parse_host_port(hostname: str) -> Tuple[str, int]:
+    """
+    parse IP address/host and port from '<host>:<port>' or '[<ipv6>]:<port>'
+    """
+
+    if hostname.startswith('['):
+        # IPv6: [<ipv6>]:<port>
+        try:
+            host_part, port_part = hostname.rsplit(']:', 1)
+            host = host_part[1:]  # remove '['
+        except ValueError:
+            raise ValueError(f"invalid IPv6 address format: {hostname}")
+        # check whether the ip address is valid
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            raise ValueError(f"invalid IP address: {host}")
+    else:
+        # <host>:<port>
+        try:
+            host, port_part = hostname.rsplit(':', 1)
+        except ValueError:
+            raise ValueError(f"invalid host name format: {hostname}")
+
+    # check port number
+    try:
+        port = int(port_part)
+        if not (0 <= port <= 65535):
+            raise ValueError
+    except ValueError:
+        raise ValueError(f"invalid port: {port_part}")
+
+    return host, port
+
 
 class Transport_HTTP(Transport):
     def __init__(self, hostname, ssl_context=None):
+        host, port = parse_host_port(hostname)
         try:
-            socket.getaddrinfo(hostname.split(':')[0], None)
+            socket.getaddrinfo(host, None)
         except socket.gaierror:
-            raise RuntimeError(f'Unable to resolve hostname: {hostname}')
+            raise RuntimeError(f'Unable to resolve hostname: {host}')
 
         if ssl_context is None:
-            self.conn = HTTPConnection(hostname, timeout=60)
+            self.conn = HTTPConnection(host, port, timeout=60)
         else:
-            self.conn = HTTPSConnection(hostname, context=ssl_context, timeout=60)
+            self.conn = HTTPSConnection(host, port, context=ssl_context, timeout=60)
         try:
             print(f'++++ Connecting to {hostname}++++')
             self.conn.connect()

@@ -97,7 +97,11 @@ def establish_http_session(device: DeviceInfo, security: Any) -> Tuple[Optional[
     """
     try:
         # Create HTTP transport
-        hostname = f"{device.ip}:{device.port}"
+        if device.ip.find(':'):
+            # IPv6 address
+            hostname = f"[{device.ip}]:{device.port}"
+        else:
+            hostname = f"{device.ip}:{device.port}"
         log.info(f"Connecting to device at {hostname}")
 
         transport = Transport_HTTP(hostname, ssl_context=None)
