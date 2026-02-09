@@ -14,6 +14,14 @@ async def run_local_control_operation(nodeid, operation, data=None, **kwargs):
     Run ESP Local Control operations directly using the clean module structure
     """
     
+    # Check if local-raw endpoints should be used
+    use_local_raw = kwargs.get('local_raw', False)
+    if use_local_raw:
+        # Use local control via raw endpoints instead of esp_local_ctrl
+        log.debug("Using local control via raw endpoints")
+        from .raw_params import run_raw_params_operation
+        return await run_raw_params_operation(nodeid, operation, data, **kwargs)
+    
     # Extract options with defaults
     pop = kwargs.get('pop', '')
     transport = kwargs.get('transport', 'http')

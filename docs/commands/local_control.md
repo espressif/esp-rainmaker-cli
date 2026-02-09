@@ -203,6 +203,122 @@ ESP RainMaker Local Control is built on the ESP Local Control protocol, which us
   - `params`: Device parameters (read/write) - contains the current state and settings of devices and services
 - **Encrypted data transfer**: All data is encrypted using the chosen security scheme (Security 1 uses X25519 + AES-CTR, Security 2 uses SRP6a + AES-GCM)
 
+## Raw Local Control Mode (--local-raw)
+
+In addition to the standard `--local` mode (ESP Local Control), the CLI also supports `--local-raw` mode which uses raw provisioning endpoints. This provides an alternative communication path that is particularly useful during device provisioning.
+
+### Comparison: --local vs --local-raw
+
+| Feature | --local (ESP Local Control) | --local-raw (Raw Provisioning) |
+|---------|---------------------------|-------------------------------|
+| **Protocol** | ESP Local Control (property-based) | Raw protocomm endpoints |
+| **Transport** | HTTP/HTTPS only | HTTP and BLE |
+| **Availability** | After provisioning complete | During and after provisioning |
+| **Endpoints** | `config`, `params` properties | `get_params`, `set_params`, `get_config` |
+| **Data Size** | Limited by HTTP response | Chunked transfer (200 bytes) for large data |
+| **Signed Response** | Not supported | Supported (with --timestamp) |
+| **Proxy Reporting** | Not supported | Supported (--proxy-report) |
+
+### When to Use --local-raw
+
+Use `--local-raw` when:
+- **During provisioning**: When you need to get/set parameters before provisioning is complete
+- **Over BLE**: When HTTP transport is not available
+- **Signed responses needed**: When you need cryptographically signed data for cloud verification
+- **Proxy reporting**: When you need to report device state to cloud via proxy API
+- **Large configurations**: When node config exceeds typical HTTP response limits (uses chunked transfer)
+
+### Raw Endpoints
+
+The `--local-raw` mode uses these provisioning endpoints:
+
+| Endpoint | Purpose | Protobuf |
+|----------|---------|----------|
+| `get_params` | Read device parameters | JSON (with optional signing) |
+| `set_params` | Write device parameters | JSON |
+| `get_config` | Read node configuration | Protobuf chunked (200 bytes) |
+
+### Usage Examples
+
+#### Over HTTP
+
+```bash
+# Get parameters
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value>
+
+# Set parameters
+esp-rainmaker-cli setparams <nodeid> --data '{"Light": {"Power": true}}' --local-raw --pop <pop_value>
+
+# Get node configuration
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --pop <pop_value>
+```
+
+#### Over BLE (During Provisioning)
+
+```bash
+# Get parameters over BLE
+esp-rainmaker-cli getparams <nodeid> --local-raw --transport ble --device_name PROV_aaf824 --pop <pop_value>
+
+# Set parameters over BLE
+esp-rainmaker-cli setparams <nodeid> --data '{"Light": {"Power": true}}' --local-raw --transport ble --device_name PROV_aaf824 --pop <pop_value>
+
+# Get node configuration over BLE
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --transport ble --device_name PROV_aaf824 --pop <pop_value>
+```
+
+#### With Signed Response
+
+```bash
+# Get signed parameters (for verification)
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value> --timestamp 1737100800
+
+# Get signed node configuration
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --pop <pop_value> --timestamp 1737100800
+```
+
+#### With Proxy Reporting
+
+```bash
+# Report parameters to cloud proxy API
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value> --proxy-report
+
+# Report initial parameters to cloud (initparams API)
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value> --proxy-report --init
+
+# Report node configuration to cloud proxy API
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --pop <pop_value> --proxy-report
+```
+
+### Proxy Reporting
+
+The `--proxy-report` flag enables automatic reporting of signed device data to the RainMaker cloud. This is useful for scenarios where:
+
+1. **User-node association**: During provisioning, report device state for cloud to associate with user
+2. **Offline sync**: After reconnecting, sync device state to cloud
+3. **Audit trail**: Create a verified record of device state
+
+**Proxy API Endpoints:**
+
+| Command | API Endpoint |
+|---------|--------------|
+| `getparams --proxy-report` | `/user/nodes/{node_id}/proxy/params` |
+| `getparams --proxy-report --init` | `/user/nodes/{node_id}/proxy/initparams` |
+| `getnodeconfig --proxy-report` | `/user/nodes/{node_id}/proxy/config` |
+
+**Signed Response Format:**
+
+```json
+{
+    "node_payload": {
+        "data": { ... },
+        "timestamp": 1737100800
+    },
+    "signature": "base64_encoded_ecdsa_signature"
+}
+```
+
+The signature is generated using the device's private key and can be verified by the cloud using the device's public key (obtained during claiming).
+
 ## Best Practices
 
 1. **Use Security 1 or 2** with proper PoP for production devices

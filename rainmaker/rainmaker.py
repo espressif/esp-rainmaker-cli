@@ -246,6 +246,18 @@ def main():
                                      choices=[0, 1, 2],
                                      default=1,
                                      help='Security version for local control')
+    getnodeconfig_parser.add_argument('--local-raw',
+                                     action='store_true',
+                                     help='Use local control via raw endpoints (get_config with fragmentation) instead of esp_local_ctrl')
+    getnodeconfig_parser.add_argument('--device_name',
+                                     type=str,
+                                     help='Device name for BLE transport (e.g., PROV_aaf824). Required when using --transport ble')
+    getnodeconfig_parser.add_argument('--timestamp',
+                                     type=int,
+                                     help='Optional timestamp to include in get_config request (for signed response)')
+    getnodeconfig_parser.add_argument('--proxy-report',
+                                     action='store_true',
+                                     help='Automatically use current timestamp and POST signed response to proxy API endpoint')
     add_profile_argument(getnodeconfig_parser)
     getnodeconfig_parser.set_defaults(func=get_node_config)
 
@@ -297,6 +309,12 @@ def main():
                                  choices=[0, 1, 2],
                                  default=1,
                                  help='Security version for local control')
+    setparams_parser.add_argument('--local-raw',
+                                 action='store_true',
+                                 help='Use local control via raw endpoints (get_params/set_params) instead of esp_local_ctrl')
+    setparams_parser.add_argument('--device_name',
+                                 type=str,
+                                 help='Device name for BLE transport (e.g., PROV_aaf824). Required when using --transport ble')
 
     # Note: setparams_data_group is mutually exclusive group, so we add profile to the parent
     add_profile_argument(setparams_parser)
@@ -328,6 +346,21 @@ def main():
                                  choices=[0, 1, 2],
                                  default=1,
                                  help='Security version for local control')
+    getparams_parser.add_argument('--local-raw',
+                                 action='store_true',
+                                 help='Use local control via raw endpoints (get_params/set_params) instead of esp_local_ctrl')
+    getparams_parser.add_argument('--device_name',
+                                 type=str,
+                                 help='Device name for BLE transport (e.g., PROV_aaf824). Required when using --transport ble')
+    getparams_parser.add_argument('--timestamp',
+                                 type=int,
+                                 help='Optional timestamp to include in get_params request (for signed response)')
+    getparams_parser.add_argument('--proxy-report',
+                                 action='store_true',
+                                 help='Automatically use current timestamp and POST signed response to proxy API endpoint')
+    getparams_parser.add_argument('--init',
+                                 action='store_true',
+                                 help='Use initparams API endpoint instead of params (only with --proxy-report)')
     add_profile_argument(getparams_parser)
     getparams_parser.set_defaults(func=get_params)
 

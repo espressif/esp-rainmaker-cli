@@ -2,6 +2,16 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.10.0] - 22-Jan-2026
+### Added
+- BLE local control support for `getparams`, `setparams`, and `getnodeconfig` commands during provisioning phase:
+  - `--local-raw` option to use custom provisioning endpoints for direct parameter/config access over BLE
+  - `--device-name` option to specify the device name for BLE discovery
+  - Fragmented transfer support for `getnodeconfig` to handle BLE MTU limits
+- `--proxy-report` option for proxy reporting to cloud backend (if the node is already mapped to the user):
+  - Sends timestamp to node and receives signed response (parameters/config + timestamp + signature)
+  - Reports to cloud on behalf of the node
+
 ## [1.9.1] - 21-Jan-2026
 ### Bugfixes
 - The IPv6 address is not supported for on-network challenge-response.

@@ -95,6 +95,83 @@ esp-rainmaker-cli getnodeconfig N7FXSyMjeYFhWcRyDig7t3 --local --pop 2c4d470d
 - Cloud API: 500-2000ms response time
 - Local Control: 50-200ms response time (5-10x faster)
 
+#### Raw Local Control Mode (--local-raw)
+
+The `--local-raw` mode provides an alternative local control mechanism that uses raw provisioning endpoints. This is particularly useful during provisioning over BLE when esp_local_ctrl may not be available.
+
+```bash
+# Basic usage over HTTP
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --pop <pop_value>
+
+# Over BLE (requires device name)
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --transport ble --device_name PROV_aabbcc --pop <pop_value>
+
+# With timestamp for signed response
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --pop <pop_value> --timestamp 1737100800
+```
+
+**Options for --local-raw:**
+- `--local-raw`: Enable raw local control mode
+- `--pop <value>`: Proof of Possession for device authentication
+- `--transport <type>`: Transport protocol (http/ble, default: http)
+- `--device_name <name>`: BLE device name (required for BLE transport, e.g., PROV_aabbcc)
+- `--timestamp <value>`: Unix timestamp for signed response
+- `--sec_ver <version>`: Security version (0/1/2, default: 1)
+
+**Key differences from --local mode:**
+
+| Feature | --local (esp_local_ctrl) | --local-raw (provisioning endpoints) |
+|---------|--------------------------|--------------------------------------|
+| Protocol | ESP Local Control | Raw protocomm (get_config endpoint) |
+| Transport | HTTP/HTTPS | HTTP/BLE |
+| Data Transfer | Single response | 200-byte chunked (for large configs) |
+| Signed Response | Not supported | Supported (with --timestamp) |
+
+**Note:** The `--local-raw` mode uses protobuf-based chunked transfer to handle large node configurations that exceed BLE MTU limits. The config is automatically split into 200-byte fragments and reassembled by the CLI.
+
+#### Proxy Reporting Mode (--proxy-report)
+
+The `--proxy-report` mode automatically retrieves signed node configuration from the device and reports it to the RainMaker cloud proxy API.
+
+```bash
+# Report node config to cloud via proxy API
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --pop <pop_value> --proxy-report
+
+# Over BLE during provisioning
+esp-rainmaker-cli getnodeconfig <nodeid> --local-raw --transport ble --device_name PROV_aabbcc --pop <pop_value> --proxy-report
+```
+
+**How it works:**
+1. Automatically uses the current Unix timestamp
+2. Retrieves node configuration from the device with signed response
+3. POSTs the signed payload to `/user/nodes/{node_id}/proxy/config`
+4. The cloud verifies the signature and processes the configuration
+
+**Response format from device:**
+```json
+{
+    "node_payload": {
+        "data": {
+            "node_id": "N7FXSyMjeYFhWcRyDig7t3",
+            "config_version": "2024-01-15",
+            "info": { ... },
+            "devices": [ ... ],
+            "services": [ ... ]
+        },
+        "timestamp": 1737100800
+    },
+    "signature": "base64_encoded_signature..."
+}
+```
+
+**Cloud proxy API response:**
+```json
+{
+    "status": "success",
+    "description": "Node config request queued successfully"
+}
+```
+
 ### Getting Node Status
 
 To check if a node is online or offline:
@@ -191,7 +268,7 @@ For offline nodes, the CLI shows the last time the node was seen online.
    ```
 
 3. Check network connectivity on the physical device
-   
+
 4. If needed, remove and reclaim the node:
    ```bash
    esp-rainmaker-cli removenode abcd1234
@@ -201,13 +278,13 @@ For offline nodes, the CLI shows the last time the node was seen online.
 ## Tips and Best Practices
 
 1. **Regular Checks**: Periodically check node status to ensure devices are online
-   
+
 2. **Keep Track of Node IDs**: Store node IDs in a safe place for future reference
-   
+
 3. **Remove Unused Nodes**: Clean up your account by removing nodes you no longer use
-   
+
 4. **Review Node Details**: Check node details to understand device capabilities
-   
+
 5. **JSON Output**: Use the `--raw` flag with getnodedetails for programmatic processing
 
 ## Troubleshooting
@@ -224,4 +301,4 @@ If a node doesn't appear in the `getnodes` command:
 If you cannot remove a node:
 - Ensure you're logged in with the account that owns the node
 - Check if the node is shared with other users (remove sharing first)
-- Verify you have the correct Node ID 
+- Verify you have the correct Node ID
