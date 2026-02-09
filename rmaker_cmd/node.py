@@ -1017,7 +1017,11 @@ def get_node_config(vars=None):
     :param vars: `nodeid` as key - Node ID for the node
                  `profile` as key - Profile to use for the operation
                  `local` as key - Use local control instead of cloud
+                 `local_raw` as key - Use raw endpoints with fragmentation
                  `pop`, `transport`, `port`, `sec_ver` - Local control options
+                 `device_name` as key - Device name for BLE transport
+                 `timestamp` as key - Timestamp for signed response
+                 `proxy_report` as key - POST signed response to proxy API endpoint
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting node config
@@ -1027,9 +1031,41 @@ def get_node_config(vars=None):
     """
     try:
         node_config = None
+        proxy_report = vars.get('proxy_report', False) if vars else False
 
-        # Check if local control is requested
-        if vars and vars.get('local', False):
+        # Check if local-raw mode is requested (raw endpoints with fragmentation)
+        if vars and vars.get('local_raw', False):
+            try:
+                from rmaker_tools.rmaker_local_ctrl.raw_config import run_raw_config_sync
+                import time
+
+                # Handle timestamp for proxy_report
+                timestamp = vars.get('timestamp', None)
+                if proxy_report and timestamp is None:
+                    timestamp = int(time.time())
+                elif timestamp == 0:
+                    timestamp = int(time.time())
+
+                local_options = {
+                    'pop': vars.get('pop', ''),
+                    'transport': vars.get('transport', 'ble'),
+                    'port': vars.get('port', 8080),
+                    'sec_ver': vars.get('sec_ver', 1),
+                    'device_name': vars.get('device_name', None),
+                    'timestamp': timestamp
+                }
+
+                node_config = run_raw_config_sync(
+                    vars['nodeid'], **local_options
+                )
+
+            except Exception as e:
+                log.error(f"Raw config retrieval failed: {e}")
+                import traceback
+                log.debug(traceback.format_exc())
+
+        # Check if local control is requested (esp_local_ctrl)
+        elif vars and vars.get('local', False):
             try:
                 # Try the proven standalone script integration first
                 from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync
@@ -1086,10 +1122,70 @@ def get_node_config(vars=None):
     except Exception as get_nodes_err:
         log.error(get_nodes_err)
     else:
-        if node_config:
-            print(json.dumps(node_config, indent=4))
-        else:
+        if node_config is None:
             log.error('Failed to get node configuration')
+            return node_config
+
+        # If proxy_report is enabled and we got a signed response, POST it to proxy API
+        if proxy_report:
+            if isinstance(node_config, dict) and 'node_payload' in node_config and 'signature' in node_config:
+                # Print the JSON received from the node
+                print("JSON received from node:")
+                print(json.dumps(node_config, indent=4))
+                print()
+
+                try:
+                    s = get_session_with_profile(vars or {})
+                    node_id = vars['nodeid']
+                    path = f'user/nodes/{node_id}/proxy/config'
+                    proxy_url = s.config.get_host() + path
+
+                    # Convert node_payload to escaped JSON string if it's a dict
+                    # (backend expects node_payload as a JSON string, not an object)
+                    proxy_config = node_config.copy()
+                    if isinstance(proxy_config.get('node_payload'), dict):
+                        # Convert to compact JSON string (matching backend expectation)
+                        proxy_config['node_payload'] = json.dumps(proxy_config['node_payload'], separators=(',', ':'))
+
+                    log.info(f"POSTing signed config to proxy API: {proxy_url}")
+                    log.debug(f"Proxy API payload: {json.dumps(proxy_config, indent=2)}")
+
+                    response = requests.post(
+                        url=proxy_url,
+                        headers=s.request_header,
+                        json=proxy_config,
+                        verify=configmanager.CERT_FILE,
+                        timeout=(5.0, 5.0)
+                    )
+                    response.raise_for_status()
+                    response_json = response.json()
+                    log.info("Successfully posted signed config to proxy API")
+                    log.info(f"Proxy API response: {json.dumps(response_json)}")
+                    print("Signed config posted to proxy API successfully")
+                    print(json.dumps(response_json, indent=4))
+                except requests.exceptions.HTTPError as http_err:
+                    log.error(f"Failed to POST to proxy API: {http_err}")
+                    if hasattr(http_err.response, 'json'):
+                        try:
+                            error_data = http_err.response.json()
+                            log.error(f"Error response: {json.dumps(error_data, indent=2)}")
+                            print(f"Error posting to proxy API: {error_data}")
+                        except:
+                            print(f"Error posting to proxy API: {http_err.response.text}")
+                    else:
+                        print(f"Error posting to proxy API: {http_err}")
+                except Exception as proxy_err:
+                    log.error(f"Failed to POST to proxy API: {proxy_err}")
+                    print(f"Error posting to proxy API: {proxy_err}")
+            else:
+                # proxy_report was set but we didn't get a signed response
+                log.warn("--proxy-report requires --local-raw with timestamp to get signed response")
+                print("Warning: No signed response available for proxy reporting")
+                print(json.dumps(node_config, indent=4))
+        else:
+            # Normal display of config
+            print(json.dumps(node_config, indent=4))
+
     return node_config
 
 
@@ -1149,8 +1245,8 @@ def set_params(vars=None):
     node_ids = [node_id.strip() for node_id in vars['nodeid'].split(',')]
 
     try:
-        # Check if local control is requested
-        if vars and vars.get('local', False):
+        # Check if local control is requested (either --local or --local-raw)
+        if vars and (vars.get('local', False) or vars.get('local_raw', False)):
             try:
                 from rmaker_lib.local_control import run_local_control_operation
 
@@ -1158,7 +1254,9 @@ def set_params(vars=None):
                     'pop': vars.get('pop', ''),
                     'transport': vars.get('transport', 'http'),
                     'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 1)
+                    'sec_ver': vars.get('sec_ver', 1),
+                    'local_raw': vars.get('local_raw', False),
+                    'device_name': vars.get('device_name', None)
                 }
 
                 # For local control, handle multiple nodes individually
@@ -1169,7 +1267,18 @@ def set_params(vars=None):
                     result = run_local_control_operation(
                         node_id, 'set_params', data, **local_options
                     )
-                    if result:
+                    # Handle result - can be dict (from raw endpoints) or bool (from esp_local_ctrl)
+                    if isinstance(result, dict):
+                        # Raw endpoints return dict with status
+                        # Always display the response from device for raw endpoints
+                        if len(node_ids) == 1:
+                            print(f"Device response: {json.dumps(result, indent=2)}")
+
+                        if result.get('status') == 'success':
+                            success_count += 1
+                        else:
+                            failed_nodes.append(node_id)
+                    elif result:
                         success_count += 1
                     else:
                         failed_nodes.append(node_id)
@@ -1182,7 +1291,9 @@ def set_params(vars=None):
                     'pop': vars.get('pop', ''),
                     'transport': vars.get('transport', 'http'),
                     'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 0)  # Force security 0 for simple mode
+                    'sec_ver': vars.get('sec_ver', 0),  # Force security 0 for simple mode
+                    'local_raw': vars.get('local_raw', False),
+                    'device_name': vars.get('device_name', None)
                 }
 
                 log.info("Using simplified local control (security level 0)")
@@ -1193,7 +1304,18 @@ def set_params(vars=None):
                     result = run_simple_local_control_operation(
                         node_id, 'set_params', data, **local_options
                     )
-                    if result:
+                    # Handle result - can be dict (from raw endpoints) or bool (from esp_local_ctrl)
+                    if isinstance(result, dict):
+                        # Raw endpoints return dict with status
+                        # Always display the response from device for raw endpoints
+                        if len(node_ids) == 1:
+                            print(f"Device response: {json.dumps(result, indent=2)}")
+
+                        if result.get('status') == 'success':
+                            success_count += 1
+                        else:
+                            failed_nodes.append(node_id)
+                    elif result:
                         success_count += 1
                     else:
                         failed_nodes.append(node_id)
@@ -1271,6 +1393,7 @@ def get_params(vars=None):
                  `profile` as key - Profile to use for the operation
                  `local` as key - Use local control instead of cloud
                  `pop`, `transport`, `port`, `sec_ver` - Local control options
+                 `proxy_report` as key - POST signed response to proxy API endpoint
     :type vars: dict | None
 
     :raises Exception: If there is an HTTP issue while getting params or
@@ -1281,18 +1404,35 @@ def get_params(vars=None):
     """
     try:
         params = None
+        proxy_report = vars.get('proxy_report', False) if vars else False
 
-        # Check if local control is requested
-        if vars and vars.get('local', False):
+        # Check if local control is requested (either --local or --local-raw)
+        if vars and (vars.get('local', False) or vars.get('local_raw', False)):
             try:
                 # Try the proven standalone script integration first
                 from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync
+                import time
+
+                # Handle timestamp: if proxy_report is set and no timestamp provided, use current time
+                # If timestamp is 0, use current system time
+                # For proxy_report with local_raw: if timestamp is explicitly provided, use original flow (send to node)
+                # Otherwise, use ch_resp workaround (get params without timestamp, sign via ch_resp)
+                timestamp = vars.get('timestamp', None)
+                timestamp_explicitly_provided = 'timestamp' in vars  # Check if --timestamp was explicitly passed
+                if proxy_report and timestamp is None:
+                    timestamp = int(time.time())
+                elif timestamp == 0:
+                    timestamp = int(time.time())
 
                 local_options = {
                     'pop': vars.get('pop', ''),
                     'transport': vars.get('transport', 'http'),
                     'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 1)
+                    'sec_ver': vars.get('sec_ver', 1),
+                    'local_raw': vars.get('local_raw', False),
+                    'device_name': vars.get('device_name', None),
+                    'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,  # Use workaround only if timestamp not explicitly provided
+                    'proxy_report': proxy_report  # Pass proxy_report flag
                 }
 
                 params = run_local_control_sync(
@@ -1304,12 +1444,28 @@ def get_params(vars=None):
                 # Fallback to direct implementation
                 try:
                     from rmaker_lib.local_control import run_local_control_operation
+                    import time
+
+                    # Handle timestamp: if proxy_report is set and no timestamp provided, use current time
+                    # If timestamp is 0, use current system time
+                    # For proxy_report with local_raw: if timestamp is explicitly provided, use original flow (send to node)
+                    # Otherwise, use ch_resp workaround (get params without timestamp, sign via ch_resp)
+                    timestamp = vars.get('timestamp', None)
+                    timestamp_explicitly_provided = 'timestamp' in vars  # Check if --timestamp was explicitly passed
+                    if proxy_report and timestamp is None:
+                        timestamp = int(time.time())
+                    elif timestamp == 0:
+                        timestamp = int(time.time())
 
                     local_options = {
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver', 1)
+                        'sec_ver': vars.get('sec_ver', 1),
+                        'local_raw': vars.get('local_raw', False),
+                        'device_name': vars.get('device_name', None),
+                        'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,  # Use workaround only if timestamp not explicitly provided
+                        'proxy_report': proxy_report  # Pass proxy_report flag
                     }
 
                     params = run_local_control_operation(
@@ -1319,12 +1475,28 @@ def get_params(vars=None):
                     log.debug(f"Direct local control failed: {e2}")
                     # Final fallback to simple implementation
                     from rmaker_lib.simple_local_control import run_simple_local_control_operation
+                    import time
+
+                    # Handle timestamp: if proxy_report is set and no timestamp provided, use current time
+                    # If timestamp is 0, use current system time
+                    # For proxy_report with local_raw: if timestamp is explicitly provided, use original flow (send to node)
+                    # Otherwise, use ch_resp workaround (get params without timestamp, sign via ch_resp)
+                    timestamp = vars.get('timestamp', None)
+                    timestamp_explicitly_provided = 'timestamp' in vars  # Check if --timestamp was explicitly passed
+                    if proxy_report and timestamp is None:
+                        timestamp = int(time.time())
+                    elif timestamp == 0:
+                        timestamp = int(time.time())
 
                     local_options = {
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver', 0)  # Force security 0 for simple mode
+                        'sec_ver': vars.get('sec_ver', 0),  # Force security 0 for simple mode
+                        'local_raw': vars.get('local_raw', False),
+                        'device_name': vars.get('device_name', None),
+                        'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,  # Use workaround only if timestamp not explicitly provided
+                        'proxy_report': proxy_report  # Pass proxy_report flag
                     }
 
                     log.info("Using simplified local control (security level 0)")
@@ -1349,7 +1521,71 @@ def get_params(vars=None):
         if params is None:
             log.error('Node status not updated.')
             return
+
+        # If proxy_report is enabled and we got a signed response, POST it to proxy API
+        if proxy_report:
+            if isinstance(params, dict) and 'node_payload' in params and 'signature' in params:
+                # Print the JSON received from the node
+                print("JSON received from node:")
+                print(json.dumps(params, indent=4))
+                print()
+
+                try:
+                    s = get_session_with_profile(vars or {})
+                    node_id = vars['nodeid']
+                    # Use initparams if --init flag is set, otherwise use params
+                    endpoint = 'initparams' if vars.get('init', False) else 'params'
+                    path = f'user/nodes/{node_id}/proxy/{endpoint}'
+                    proxy_url = s.config.get_host() + path
+
+                    # Convert node_payload to escaped JSON string if it's a dict
+                    # (backend expects node_payload as a JSON string, not an object)
+                    proxy_params = params.copy()
+                    if isinstance(proxy_params.get('node_payload'), dict):
+                        # Convert to compact JSON string (matching backend expectation)
+                        proxy_params['node_payload'] = json.dumps(proxy_params['node_payload'], separators=(',', ':'))
+
+                    log.info(f"POSTing signed response to proxy API: {proxy_url}")
+                    log.debug(f"Proxy API payload: {json.dumps(proxy_params, indent=2)}")
+
+                    response = requests.post(
+                        url=proxy_url,
+                        headers=s.request_header,
+                        json=proxy_params,
+                        verify=configmanager.CERT_FILE,
+                        timeout=(5.0, 5.0)
+                    )
+                    response.raise_for_status()
+                    response_json = response.json()
+                    log.info("Successfully posted signed response to proxy API")
+                    log.info(f"Proxy API response: {json.dumps(response_json)}")
+                    print("Signed response posted to proxy API successfully")
+                    print(json.dumps(response_json, indent=4))
+                except requests.exceptions.HTTPError as http_err:
+                    log.error(f"Failed to POST to proxy API: {http_err}")
+                    if hasattr(http_err.response, 'json'):
+                        try:
+                            error_data = http_err.response.json()
+                            log.error(f"Error response: {json.dumps(error_data, indent=2)}")
+                            print(f"Error posting to proxy API: {error_data}")
+                        except:
+                            print(f"Error posting to proxy API: {http_err.response.text}")
+                    else:
+                        print(f"Error posting to proxy API: {http_err}")
+                except Exception as proxy_err:
+                    log.error(f"Failed to POST to proxy API: {proxy_err}")
+                    print(f"Error posting to proxy API: {proxy_err}")
+            else:
+                # proxy_report was set but we didn't get a signed response
+                # This should only happen if local_raw is not used, since local_raw with proxy_report
+                # will use ch_resp endpoint to sign
+                if vars and vars.get('local_raw', False):
+                    log.warn("--proxy-report with --local-raw should have produced signed response via ch_resp endpoint")
+                else:
+                    log.warn("--proxy-report requires --local-raw to use ch_resp endpoint for signing")
+                print(json.dumps(params, indent=4))
         else:
+            # Normal display of params
             print(json.dumps(params, indent=4))
     return params
 

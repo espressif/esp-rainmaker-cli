@@ -279,6 +279,134 @@ esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": t
 esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local --pop 2c4d470d
 ```
 
+## Raw Local Control Mode (--local-raw)
+
+The `--local-raw` mode provides an alternative local control mechanism that uses raw provisioning endpoints instead of ESP Local Control. This is particularly useful during provisioning when esp_local_ctrl may not be available.
+
+### Key Differences from --local Mode
+
+| Feature | --local (esp_local_ctrl) | --local-raw (provisioning endpoints) |
+|---------|--------------------------|--------------------------------------|
+| Protocol | ESP Local Control (property-based) | Raw protocomm endpoints |
+| Transport | HTTP/HTTPS | HTTP/BLE |
+| Availability | After provisioning | During and after provisioning |
+| Endpoints | `config`, `params` properties | `get_params`, `set_params` endpoints |
+| Signed Response | Not supported | Supported (with --timestamp) |
+
+### Getting Parameters with --local-raw
+
+```bash
+# Basic usage over HTTP
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value>
+
+# Over BLE (requires device name)
+esp-rainmaker-cli getparams <nodeid> --local-raw --transport ble --device_name PROV_aabbcc --pop <pop_value>
+
+# With timestamp for signed response
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value> --timestamp 1737100800
+```
+
+**Options for --local-raw:**
+- `--local-raw`: Enable raw local control mode
+- `--pop <value>`: Proof of Possession for device authentication
+- `--transport <type>`: Transport protocol (http/ble, default: http)
+- `--device_name <name>`: BLE device name (required for BLE transport, e.g., PROV_aabbcc)
+- `--timestamp <value>`: Unix timestamp for signed response
+- `--sec_ver <version>`: Security version (0/1/2, default: 1)
+
+### Setting Parameters with --local-raw
+
+```bash
+# Basic usage over HTTP
+esp-rainmaker-cli setparams <nodeid> --data '{"Light": {"Power": true}}' --local-raw --pop <pop_value>
+
+# Over BLE during provisioning
+esp-rainmaker-cli setparams <nodeid> --data '{"Light": {"Power": true}}' --local-raw --transport ble --device_name PROV_aabbcc --pop <pop_value>
+```
+
+### BLE Transport Examples
+
+When using BLE transport, the `--device_name` parameter is required:
+
+```bash
+# Get parameters over BLE
+esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local-raw --transport ble --device_name PROV_aaf824 --pop 2c4d470d
+
+# Set parameters over BLE
+esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": true}}' --local-raw --transport ble --device_name PROV_aaf824 --pop 2c4d470d
+```
+
+The device name is typically in the format `PROV_XXXXXX` where XXXXXX are the last 6 characters of the device's MAC address.
+
+## Proxy Reporting Mode (--proxy-report)
+
+The `--proxy-report` mode automatically retrieves signed parameters from the device and reports them to the RainMaker cloud proxy API. This is useful for scenarios where the cloud needs to receive device state updates directly from local communication.
+
+### How It Works
+
+1. Automatically uses the current Unix timestamp
+2. Retrieves parameters from the device with signed response
+3. POSTs the signed payload to the RainMaker cloud proxy API
+4. The cloud verifies the signature and processes the parameters
+
+### Usage
+
+```bash
+# Report current params to cloud via proxy API
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value> --proxy-report
+
+# Report initial params to cloud (uses initparams API)
+esp-rainmaker-cli getparams <nodeid> --local-raw --pop <pop_value> --proxy-report --init
+```
+
+**Options for --proxy-report:**
+- `--proxy-report`: Enable proxy reporting mode
+- `--init`: Use `initparams` API endpoint instead of `params` (for initial parameter reporting)
+
+### Proxy API Endpoints
+
+| Command | Default API Path | With --init |
+|---------|------------------|-------------|
+| `getparams --proxy-report` | `/user/nodes/{node_id}/proxy/params` | `/user/nodes/{node_id}/proxy/initparams` |
+
+### Example Workflow
+
+```bash
+# During provisioning, report initial device state to cloud
+esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local-raw --transport ble --device_name PROV_aaf824 --pop 2c4d470d --proxy-report --init
+
+# After provisioning, report current state to cloud
+esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local-raw --pop 2c4d470d --proxy-report
+```
+
+### Response Format
+
+When using `--proxy-report`, the signed response from the device looks like:
+
+```json
+{
+    "node_payload": {
+        "data": {
+            "Light": {
+                "Power": true,
+                "Brightness": 75
+            }
+        },
+        "timestamp": 1737100800
+    },
+    "signature": "base64_encoded_signature..."
+}
+```
+
+The cloud proxy API response:
+
+```json
+{
+    "status": "success",
+    "description": "Node params request queued successfully"
+}
+```
+
 ### Finding Device PoP Value
 
 To use local control, you need the device's Proof of Possession (PoP) value:
@@ -298,4 +426,4 @@ Or check the device's physical label/QR code for the PoP value.
 - **Privacy**: No data sent to cloud servers
 - **Responsiveness**: Real-time device control for better user experience
 
-For more details on ESP Local Control, see the [Local Control Guide](local_control.md). 
+For more details on ESP Local Control, see the [Local Control Guide](local_control.md).

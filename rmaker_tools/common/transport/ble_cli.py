@@ -131,25 +131,46 @@ class BLE_Bleak_Client:
             self.device = None
             raise RuntimeError('Provisioning service not found')
 
+        # Read all characteristics and their user descriptors to build endpoint name -> UUID mapping
         nu_lookup = dict()
+        discovered_endpoints = []
         for characteristic in service.characteristics:
+            # Store all characteristics for later use
+            self.characteristics[characteristic.uuid] = characteristic
+            # Read user descriptors (UUID 2901) which contain endpoint names
             for descriptor in characteristic.descriptors:
                 if descriptor.uuid[4:8] != '2901':
                     continue
-                readval = await self.device.read_gatt_descriptor(descriptor.handle)
-                found_name = ''.join(chr(b) for b in readval).lower()
-                nu_lookup[found_name] = characteristic.uuid
-                self.characteristics[characteristic.uuid] = characteristic
+                try:
+                    readval = await self.device.read_gatt_descriptor(descriptor.handle)
+                    found_name = ''.join(chr(b) for b in readval).lower()
+                    nu_lookup[found_name] = characteristic.uuid
+                    discovered_endpoints.append(found_name)
+                except Exception as e:
+                    # Skip if descriptor read fails
+                    continue
 
+        # Debug: Print discovered endpoints
+        if discovered_endpoints:
+            print(f"Discovered endpoints via user descriptors: {', '.join(discovered_endpoints)}")
+        else:
+            print("Warning: No endpoints found with user descriptors (UUID 2901)")
+
+        # Check if all requested endpoints were found
         match_found = True
+        missing_endpoints = []
         for name in self.chrc_names:
             if name not in nu_lookup:
                 # Endpoint name not present
                 match_found = False
-                break
+                missing_endpoints.append(name)
 
-        # Create lookup table only if all endpoint names found
-        self.nu_lookup = [None, nu_lookup][match_found]
+        # Use the lookup table if all endpoints found, otherwise None (will use fallback)
+        self.nu_lookup = nu_lookup if match_found else None
+        
+        # If some endpoints are missing, log which ones
+        if missing_endpoints:
+            print(f"Missing endpoints: {', '.join(missing_endpoints)}")
 
         return True
 
@@ -161,6 +182,15 @@ class BLE_Bleak_Client:
         if uuid in self.characteristics:
             return True
         return False
+    
+    def get_available_characteristics(self):
+        """Return list of available characteristic UUIDs"""
+        return list(self.characteristics.keys())
+    
+    def get_service_uuid(self):
+        """Return the actual service UUID that was used (from advertisement or fallback)"""
+        # Return the discovered service UUID if available, otherwise fallback
+        return self.srv_uuid_adv or self.srv_uuid_fallback
 
     async def disconnect(self):
         if self.device:
@@ -203,6 +233,14 @@ class BLE_Console_Client:
         if resp != 'Y' and resp != 'y':
             return False
         return True
+    
+    def get_available_characteristics(self):
+        """Return empty list for console client (can't auto-detect)"""
+        return []
+    
+    def get_service_uuid(self):
+        """Return fallback service UUID for console client"""
+        return None
 
     async def disconnect(self):
         pass
