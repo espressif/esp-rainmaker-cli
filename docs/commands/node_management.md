@@ -202,6 +202,26 @@ esp-rainmaker-cli removenode abcd1234
 
 This removes the association between your user account and the node. The node will need to be claimed again before it can be used.
 
+### Managing Tags and Metadata
+
+Use the `node` command to add/remove tags and set/delete metadata on existing nodes. See the [Node Tags and Metadata](./node_tags_metadata.md) documentation for full details.
+
+```bash
+# Add tags
+esp-rainmaker-cli node add-tags <nodeid> --tags "location:pune,name:espressif"
+
+# Remove tags
+esp-rainmaker-cli node remove-tags <nodeid> --tags "location:pune"
+
+# Set metadata
+esp-rainmaker-cli node set-metadata <nodeid> --data '{"serial_no": "abc123"}'
+
+# Delete metadata
+esp-rainmaker-cli node delete-metadata <nodeid> --key "serial_no"
+```
+
+Tags and metadata can also be attached during provisioning via the `--tags` and `--metadata` options on the `provision` command.
+
 ## Understanding Node Information
 
 ### Node Structure

@@ -340,7 +340,7 @@ class Node:
         log.info(f"Updating parameters for {len(node_params_list)} nodes")
         return Node._set_params_api(node_params_list, session.config, session.request_header)
 
-    def __user_node_mapping(self, secret_key, operation):
+    def __user_node_mapping(self, secret_key, operation, tags=None, metadata=None):
         """
         Add or remove the user node mapping.
 
@@ -351,6 +351,12 @@ class Node:
         :param operation: Operation to be performed, can take values
                           'add' or 'remove'
         :type operation: str
+
+        :param tags: Optional list of tags to attach during mapping (format: ["key:value", ...])
+        :type tags: list | None
+
+        :param metadata: Optional metadata dict to attach during mapping
+        :type metadata: dict | None
 
         :raises NetworkError: If there is a network connection issue
                               while adding user node mapping
@@ -370,6 +376,11 @@ class Node:
             'secret_key': secret_key,
             'operation': operation
         }
+
+        if tags:
+            request_payload['tags'] = tags
+        if metadata:
+            request_payload['metadata'] = metadata
 
         # Get fresh token (will refresh if expired) before making API call
         # This prevents "Unauthorized" errors if token expired during provisioning
@@ -419,13 +430,19 @@ class Node:
             return response['request_id']
         return None
 
-    def add_user_node_mapping(self, secret_key):
+    def add_user_node_mapping(self, secret_key, tags=None, metadata=None):
         """
         Add user node mapping.
 
         :param secret_key:  The randomly generated secret key that will be
                             used for User-Node mapping
         :type secret_key: str
+
+        :param tags: Optional list of tags to attach during mapping (format: ["key:value", ...])
+        :type tags: list | None
+
+        :param metadata: Optional metadata dict to attach during mapping
+        :type metadata: dict | None
 
         :raises NetworkError: If there is a network connection issue while
                               adding user node mapping
@@ -438,7 +455,7 @@ class Node:
         """
         log.info("Adding user node mapping request with nodeid : " +
                  self.__nodeid)
-        return self.__user_node_mapping(secret_key, 'add')
+        return self.__user_node_mapping(secret_key, 'add', tags=tags, metadata=metadata)
 
     def remove_user_node_mapping(self):
         """
@@ -845,6 +862,163 @@ class Node:
             raise get_nodes_params_err
 
         response = json.loads(response.text)
-        log.debug("Received shared nodes successfully.")
+        log.debug("Received sharing requests successfully.")
 
+        return response
+
+    def update_node_tags(self, tags):
+        """
+        Add tags to a node.
+        Uses PUT /v1/user/nodes?node_id=<node_id>
+
+        :param tags: List of tags to add (format: ["key:value", ...])
+        :type tags: list
+
+        :raises NetworkError: If there is a network connection issue
+        :raises Exception: If there is an HTTP issue while updating tags
+
+        :return: API response on Success
+        :rtype: dict
+        """
+        socket.setdefaulttimeout(10)
+        log.info("Adding tags to node : " + self.__nodeid)
+        path = 'user/nodes'
+        query_parameters = 'node_id=' + self.__nodeid
+        url = self.config.get_host() + path + '?' + query_parameters
+
+        payload = {'tags': tags}
+
+        try:
+            log.debug("Update node tags request url : " + url)
+            log.debug("Update node tags request payload : " + json.dumps(payload))
+            response = requests.put(url=url,
+                                    headers=self.request_header,
+                                    json=payload,
+                                    verify=configmanager.CERT_FILE,
+                                    timeout=(5.0, 5.0))
+            log.debug("Update node tags response : " + response.text)
+            response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
+        except requests.exceptions.SSLError:
+            raise SSLError
+        except requests.exceptions.ConnectionError:
+            raise NetworkError
+        except Timeout as time_err:
+            log.debug(time_err)
+            raise RequestTimeoutError
+        except RequestException as req_err:
+            log.debug(req_err)
+            raise req_err
+
+        response = json.loads(response.text)
+        log.info("Added tags to node successfully.")
+        return response
+
+    def remove_node_tags(self, tags):
+        """
+        Remove tags from a node.
+        Uses DELETE /v1/user/nodes?node_id=<node_id>
+
+        :param tags: List of tags to remove (format: ["key:value", ...])
+        :type tags: list
+
+        :raises NetworkError: If there is a network connection issue
+        :raises Exception: If there is an HTTP issue while removing tags
+
+        :return: API response on Success
+        :rtype: dict
+        """
+        socket.setdefaulttimeout(10)
+        log.info("Removing tags from node : " + self.__nodeid)
+        path = 'user/nodes'
+        query_parameters = 'node_id=' + self.__nodeid
+        url = self.config.get_host() + path + '?' + query_parameters
+
+        payload = {'tags': tags}
+
+        try:
+            log.debug("Remove node tags request url : " + url)
+            log.debug("Remove node tags request payload : " + json.dumps(payload))
+            response = requests.delete(url=url,
+                                       headers=self.request_header,
+                                       json=payload,
+                                       verify=configmanager.CERT_FILE,
+                                       timeout=(5.0, 5.0))
+            log.debug("Remove node tags response : " + response.text)
+            response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
+        except requests.exceptions.SSLError:
+            raise SSLError
+        except requests.exceptions.ConnectionError:
+            raise NetworkError
+        except Timeout as time_err:
+            log.debug(time_err)
+            raise RequestTimeoutError
+        except RequestException as req_err:
+            log.debug(req_err)
+            raise req_err
+
+        response = json.loads(response.text)
+        log.info("Removed tags from node successfully.")
+        return response
+
+    def update_node_metadata(self, metadata):
+        """
+        Update metadata for a node. Follows shadow-style merge rules:
+        - {"key": value} upserts that key
+        - {"key": null} deletes that key
+        - null (top-level) deletes all metadata
+
+        Uses PUT /v1/user/nodes?node_id=<node_id>
+
+        :param metadata: Metadata dict to set/update, or None to delete all
+        :type metadata: dict | None
+
+        :raises NetworkError: If there is a network connection issue
+        :raises Exception: If there is an HTTP issue while updating metadata
+
+        :return: API response on Success
+        :rtype: dict
+        """
+        socket.setdefaulttimeout(10)
+        log.info("Updating metadata for node : " + self.__nodeid)
+        path = 'user/nodes'
+        query_parameters = 'node_id=' + self.__nodeid
+        url = self.config.get_host() + path + '?' + query_parameters
+
+        payload = {'metadata': metadata}
+
+        try:
+            log.debug("Update node metadata request url : " + url)
+            log.debug("Update node metadata request payload : " + json.dumps(payload))
+            response = requests.put(url=url,
+                                    headers=self.request_header,
+                                    json=payload,
+                                    verify=configmanager.CERT_FILE,
+                                    timeout=(5.0, 5.0))
+            log.debug("Update node metadata response : " + response.text)
+            response.raise_for_status()
+
+        except HTTPError as http_err:
+            log.debug(http_err)
+            raise HttpErrorResponse(response.json())
+        except requests.exceptions.SSLError:
+            raise SSLError
+        except requests.exceptions.ConnectionError:
+            raise NetworkError
+        except Timeout as time_err:
+            log.debug(time_err)
+            raise RequestTimeoutError
+        except RequestException as req_err:
+            log.debug(req_err)
+            raise req_err
+
+        response = json.loads(response.text)
+        log.info("Updated node metadata successfully.")
         return response

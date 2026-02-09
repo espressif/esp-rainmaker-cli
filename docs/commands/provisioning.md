@@ -235,6 +235,23 @@ esp-rainmaker-cli provision --sec_ver 2 \
   --sec2_password mypass
 ```
 
+### Provisioning with Tags and Metadata
+
+You can attach tags and metadata to a node at mapping time. This works with all transport modes and both mapping flows (traditional and challenge-response). See [Node Tags and Metadata](./node_tags_metadata.md) for details.
+
+```bash
+# BLE provisioning with tags and metadata
+esp-rainmaker-cli provision --pop abcd1234 \
+  --transport ble --device_name PROV_d76c30 \
+  --tags "location:mumbai,env:production" \
+  --metadata '{"serial_no": "abc123"}'
+
+# On-network mapping with tags
+esp-rainmaker-cli provision --transport on-network \
+  --device-ip 192.168.1.50 --pop abcd1234 \
+  --tags "esp.location:office"
+```
+
 ### User-Node Mapping Without Wi-Fi Provisioning
 ```bash
 # Perform challenge-response mapping and skip sending Wi-Fi credentials
@@ -272,6 +289,8 @@ This workflow will be useful for BLE-only cases in future, wherein the nodes wil
 | `--discovery-timeout` | mDNS discovery timeout in seconds for on-network transport (default: 5.0) | `--discovery-timeout 10.0` |
 | `--disable-chal-resp` | Disable challenge-response on device after successful mapping (default: True for on-network, False for BLE/SoftAP) | `--disable-chal-resp` |
 | `--no-disable-chal-resp` | Do NOT disable challenge-response after successful mapping (overrides `--disable-chal-resp`) | `--no-disable-chal-resp` |
+| `--tags` | Comma-separated tags in `key:value` format to attach during node mapping | `--tags "location:pune,name:espressif"` |
+| `--metadata` | Metadata as JSON string to attach during node mapping | `--metadata '{"serial_no": "abc123"}'` |
 
 ## Provisioning Process
 

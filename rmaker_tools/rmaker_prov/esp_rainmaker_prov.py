@@ -163,7 +163,8 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
 
 def provision_device(transport_mode, pop, userid, secretkey,
                      ssid=None, passphrase=None, security_version=None,
-                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False, no_wifi=False, disable_chal_resp=False):
+                     sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False, no_wifi=False, disable_chal_resp=False,
+                     tags=None, metadata=None):
     """
     Wi-Fi Provision a device
 
@@ -334,7 +335,8 @@ def provision_device(transport_mode, pop, userid, secretkey,
             if version_response and challenge_response.has_challenge_response_capability(version_response):
                 print("Device supports challenge-response, initiating user-node association...")
                 success, nodeid = challenge_response.perform_challenge_response_flow(
-                    obj_transport, obj_security, session, disable_on_success=disable_chal_resp)
+                    obj_transport, obj_security, session, disable_on_success=disable_chal_resp,
+                    tags=tags, metadata=metadata)
                 if not success:
                     print("Challenge-response user-node association failed")
                     return None

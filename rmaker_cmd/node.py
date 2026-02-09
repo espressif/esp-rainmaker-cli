@@ -1878,3 +1878,203 @@ def raw_api_call(vars=None):
         traceback.print_exc()
     return
 
+
+def node_add_tags(vars=None):
+    """
+    Add tags to a node.
+
+    :param vars: Parameters:
+                 `nodeid` as key - Node ID for the node
+                 `tags` as key - Comma-separated list of tags (key:value format)
+                 `profile` as key - Profile to use for the operation
+    :type vars: dict | None
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        s = get_session_with_profile(vars or {})
+        node_id = vars.get('nodeid')
+        tags_str = vars.get('tags')
+
+        if not node_id:
+            print("Error: Node ID is required.")
+            return
+        if not tags_str:
+            print("Error: Tags are required.")
+            return
+
+        # Parse comma-separated tags
+        tags = [t.strip() for t in tags_str.split(',') if t.strip()]
+
+        # Validate tag format (key:value)
+        for tag in tags:
+            if ':' not in tag:
+                print(f"Error: Invalid tag format '{tag}'. Tags must be in key:value format.")
+                return
+
+        n = node.Node(node_id, s)
+        response = n.update_node_tags(tags)
+
+        if response.get('status') == 'success':
+            print(f"Tags added to node {node_id} successfully.")
+        else:
+            description = response.get('description', 'Unknown error')
+            print(f"Failed to add tags: {description}")
+
+    except Exception as e:
+        log.error(f"Error adding tags: {e}")
+
+
+def node_remove_tags(vars=None):
+    """
+    Remove tags from a node.
+
+    :param vars: Parameters:
+                 `nodeid` as key - Node ID for the node
+                 `tags` as key - Comma-separated list of tags to remove (key:value format)
+                 `profile` as key - Profile to use for the operation
+    :type vars: dict | None
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        s = get_session_with_profile(vars or {})
+        node_id = vars.get('nodeid')
+        tags_str = vars.get('tags')
+
+        if not node_id:
+            print("Error: Node ID is required.")
+            return
+        if not tags_str:
+            print("Error: Tags are required.")
+            return
+
+        # Parse comma-separated tags
+        tags = [t.strip() for t in tags_str.split(',') if t.strip()]
+
+        n = node.Node(node_id, s)
+        response = n.remove_node_tags(tags)
+
+        if response.get('status') == 'success':
+            print(f"Tags removed from node {node_id} successfully.")
+        else:
+            description = response.get('description', 'Unknown error')
+            print(f"Failed to remove tags: {description}")
+
+    except Exception as e:
+        log.error(f"Error removing tags: {e}")
+
+
+def node_set_metadata(vars=None):
+    """
+    Set or update metadata for a node. Follows shadow-style merge rules:
+    - New keys are added, existing keys are updated
+    - To delete a specific key, set its value to null in the JSON
+
+    :param vars: Parameters:
+                 `nodeid` as key - Node ID for the node
+                 `data` as key - JSON string of metadata to set
+                 `filepath` as key - Path to JSON file containing metadata
+                 `profile` as key - Profile to use for the operation
+    :type vars: dict | None
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        s = get_session_with_profile(vars or {})
+        node_id = vars.get('nodeid')
+
+        if not node_id:
+            print("Error: Node ID is required.")
+            return
+
+        # Parse metadata from --data or --filepath
+        data_str = vars.get('data')
+        filepath = vars.get('filepath')
+
+        if not data_str and not filepath:
+            print("Error: Either --data or --filepath is required.")
+            return
+
+        metadata = None
+        if data_str:
+            try:
+                metadata = json.loads(data_str)
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in --data: {e}")
+                return
+        elif filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+            except FileNotFoundError:
+                print(f"Error: File not found: {filepath}")
+                return
+            except json.JSONDecodeError as e:
+                print(f"Error: Invalid JSON in file {filepath}: {e}")
+                return
+
+        n = node.Node(node_id, s)
+        response = n.update_node_metadata(metadata)
+
+        if response.get('status') == 'success':
+            print(f"Metadata updated for node {node_id} successfully.")
+        else:
+            description = response.get('description', 'Unknown error')
+            print(f"Failed to update metadata: {description}")
+
+    except Exception as e:
+        log.error(f"Error updating metadata: {e}")
+
+
+def node_delete_metadata(vars=None):
+    """
+    Delete metadata from a node.
+    Without --key, deletes all metadata.
+    With --key, deletes only the specified key(s).
+
+    :param vars: Parameters:
+                 `nodeid` as key - Node ID for the node
+                 `key` as key - Comma-separated list of metadata keys to delete (optional)
+                 `profile` as key - Profile to use for the operation
+    :type vars: dict | None
+
+    :return: None on Success
+    :rtype: None
+    """
+    try:
+        s = get_session_with_profile(vars or {})
+        node_id = vars.get('nodeid')
+
+        if not node_id:
+            print("Error: Node ID is required.")
+            return
+
+        key_str = vars.get('key')
+
+        n = node.Node(node_id, s)
+
+        if key_str:
+            # Delete specific keys by setting them to None
+            keys = [k.strip() for k in key_str.split(',') if k.strip()]
+            metadata = {k: None for k in keys}
+            response = n.update_node_metadata(metadata)
+            key_list = ', '.join(keys)
+            success_msg = f"Metadata key(s) '{key_list}' deleted from node {node_id} successfully."
+        else:
+            # Delete all metadata by sending null
+            response = n.update_node_metadata(None)
+            success_msg = f"All metadata deleted from node {node_id} successfully."
+
+        if response.get('status') == 'success':
+            print(success_msg)
+        else:
+            description = response.get('description', 'Unknown error')
+            print(f"Failed to delete metadata: {description}")
+
+    except Exception as e:
+        log.error(f"Error deleting metadata: {e}")
+

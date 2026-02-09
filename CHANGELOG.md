@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.11.0] - 09-Feb-2-26
+- Add support for Tags and Metadata during provisioning and also after mapping a user. Check `provision`
+  and `node` commands
+
 ## [1.10.0] - 22-Jan-2026
 ### Added
 - BLE local control support for `getparams`, `setparams`, and `getnodeconfig` commands during provisioning phase:
