@@ -123,6 +123,19 @@ def provision(vars=None):
         passphrase = vars.get('passphrase')
         no_wifi = vars.get('no_wifi', False)
 
+        # Parse tags and metadata for node mapping
+        mapping_tags = None
+        mapping_metadata = None
+        tags_str = vars.get('tags')
+        metadata_str = vars.get('metadata')
+        if tags_str:
+            mapping_tags = [t.strip() for t in tags_str.split(',') if t.strip()]
+        if metadata_str:
+            try:
+                mapping_metadata = json.loads(metadata_str)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON in --metadata: {e}")
+
         # Generate secret key for user-node mapping
         secret_key = str(uuid.uuid4())
 
@@ -182,7 +195,9 @@ def provision(vars=None):
                 sec_ver_override=sec_ver,
                 discovery_timeout=discovery_timeout,
                 interactive=True,
-                disable_on_success=disable_chal_resp
+                disable_on_success=disable_chal_resp,
+                tags=mapping_tags,
+                metadata=mapping_metadata
             )
 
             if success and node_id:
@@ -220,7 +235,9 @@ def provision(vars=None):
                 session=curr_session,
                 no_retry=vars.get('no_retry', False),
                 no_wifi=no_wifi,
-                disable_chal_resp=disable_chal_resp
+                disable_chal_resp=disable_chal_resp,
+                tags=mapping_tags,
+                metadata=mapping_metadata
             )
         except RuntimeError as claim_err:
             # Handle claim requirement error specifically
@@ -272,7 +289,7 @@ def provision(vars=None):
         try:
             log.info('Adding node to user account...')
             node_obj = node.Node(node_id, curr_session)
-            request_id = node_obj.add_user_node_mapping(secret_key)
+            request_id = node_obj.add_user_node_mapping(secret_key, tags=mapping_tags, metadata=mapping_metadata)
             if not request_id:
                 print(f'⚠️  Warning: Node provisioned but failed to add to account')
                 log.warning('add_user_node_mapping returned None')

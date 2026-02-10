@@ -192,7 +192,8 @@ def initiate_challenge_mapping(session):
         return False, None, None
 
 
-def verify_challenge_response(session, request_id, node_id, challenge_response_bytes):
+def verify_challenge_response(session, request_id, node_id, challenge_response_bytes,
+                              tags=None, metadata=None):
     """
     Verify challenge response with cloud API
 
@@ -203,6 +204,10 @@ def verify_challenge_response(session, request_id, node_id, challenge_response_b
     :type node_id: str
     :param challenge_response_bytes: Binary challenge response from device
     :type challenge_response_bytes: bytes
+    :param tags: Optional list of tags to attach during mapping (format: ["key:value", ...])
+    :type tags: list | None
+    :param metadata: Optional metadata dict to attach during mapping
+    :type metadata: dict | None
 
     :return: True if verification successful
     :rtype: bool
@@ -236,6 +241,11 @@ def verify_challenge_response(session, request_id, node_id, challenge_response_b
             "node_id": node_id,
             "challenge_response": challenge_response_hex
         }
+
+        if tags:
+            data['tags'] = tags
+        if metadata:
+            data['metadata'] = metadata
 
         # Make API call
         response = requests.post(url, json=data, headers=headers, timeout=10)
@@ -307,7 +317,7 @@ def send_disable_chal_resp(transport, security, endpoint='ch_resp'):
 
 
 def perform_challenge_response_flow(transport, security, session, endpoint='ch_resp',
-                                    disable_on_success=False):
+                                    disable_on_success=False, tags=None, metadata=None):
     """
     Perform complete challenge-response flow for user-node association
 
@@ -318,6 +328,10 @@ def perform_challenge_response_flow(transport, security, session, endpoint='ch_r
     :param disable_on_success: If True, send disable command after successful mapping.
                                Default is False for BLE/SoftAP (allows retry if provisioning fails).
                                On-network flows typically set this to True.
+    :param tags: Optional list of tags to attach during mapping (format: ["key:value", ...])
+    :type tags: list | None
+    :param metadata: Optional metadata dict to attach during mapping
+    :type metadata: dict | None
 
     :return: Tuple of (success, node_id)
     :rtype: tuple
@@ -337,7 +351,8 @@ def perform_challenge_response_flow(transport, security, session, endpoint='ch_r
             return False, None
 
         # Step 3: Verify response with cloud
-        success = verify_challenge_response(session, request_id, node_id, challenge_response)
+        success = verify_challenge_response(session, request_id, node_id, challenge_response,
+                                            tags=tags, metadata=metadata)
         if not success:
             return False, None
 

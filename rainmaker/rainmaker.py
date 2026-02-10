@@ -7,6 +7,7 @@
 import sys
 import argparse
 from rmaker_cmd.node import *
+from rmaker_cmd.node import node_add_tags, node_remove_tags, node_set_metadata, node_delete_metadata
 from rmaker_cmd.user import signup, login, forgot_password,\
                             get_user_details, logout, set_region_configuration, \
                             profile_list, profile_current, profile_switch, profile_add, profile_remove, delete_user
@@ -483,6 +484,16 @@ def main():
                                   help='Do NOT disable challenge-response on device after successful mapping.\n'
                                        'Overrides the transport-specific default behavior.')
 
+    provision_parser.add_argument('--tags',
+                                  type=str,
+                                  help='Comma-separated list of tags to attach during node mapping\n'
+                                       '(e.g., "location:pune,name:espressif"). Tags must be in key:value format.')
+
+    provision_parser.add_argument('--metadata',
+                                  type=str,
+                                  help='Metadata as JSON string to attach during node mapping\n'
+                                       '(e.g., \'{"serial_no": "abc123", "region": "us"}\')')
+
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
 
@@ -838,6 +849,89 @@ def main():
     group_list_nodes_parser.add_argument('--raw', action='store_true', help='Print raw JSON output (only with --node-details)')
     add_profile_argument(group_list_nodes_parser)
     group_list_nodes_parser.set_defaults(func=group_list_nodes)
+
+    # Node Management (tags, metadata)
+    node_parser = subparsers.add_parser('node',
+                                        help='Manage node properties (tags, metadata)')
+    node_parser.set_defaults(func=lambda vars=None: node_parser.print_help())
+    node_subparsers = node_parser.add_subparsers(dest='node_command', help='Node operations')
+
+    # node add-tags
+    node_add_tags_parser = node_subparsers.add_parser('add-tags',
+                                                       help='Add tags to a node',
+                                                       description='Add tags to a node. Tags must be in key:value format.')
+    node_add_tags_parser.add_argument('nodeid',
+                                      type=str,
+                                      metavar='<nodeid>',
+                                      help='Node ID for the node')
+    node_add_tags_parser.add_argument('--tags',
+                                      type=str,
+                                      required=True,
+                                      metavar='<tags>',
+                                      help='Comma-separated list of tags in key:value format\n'
+                                           '(e.g., "location:pune,name:espressif")')
+    add_profile_argument(node_add_tags_parser)
+    node_add_tags_parser.set_defaults(func=node_add_tags)
+
+    # node remove-tags
+    node_remove_tags_parser = node_subparsers.add_parser('remove-tags',
+                                                          help='Remove tags from a node',
+                                                          description='Remove specific tags from a node.')
+    node_remove_tags_parser.add_argument('nodeid',
+                                         type=str,
+                                         metavar='<nodeid>',
+                                         help='Node ID for the node')
+    node_remove_tags_parser.add_argument('--tags',
+                                         type=str,
+                                         required=True,
+                                         metavar='<tags>',
+                                         help='Comma-separated list of tags to remove\n'
+                                              '(e.g., "location:pune,name:espressif")')
+    add_profile_argument(node_remove_tags_parser)
+    node_remove_tags_parser.set_defaults(func=node_remove_tags)
+
+    # node set-metadata
+    node_set_metadata_parser = node_subparsers.add_parser('set-metadata',
+                                                           help='Set or update metadata for a node',
+                                                           description='Set or update metadata for a node.\n'
+                                                                       'Follows shadow-style merge rules:\n'
+                                                                       '  - New keys are added, existing keys are updated\n'
+                                                                       '  - Set a key to null to delete it\n'
+                                                                       '  - Arrays are overwritten (not merged)')
+    node_set_metadata_parser.add_argument('nodeid',
+                                          type=str,
+                                          metavar='<nodeid>',
+                                          help='Node ID for the node')
+    node_set_metadata_data_group = node_set_metadata_parser.add_mutually_exclusive_group(required=True)
+    node_set_metadata_data_group.add_argument('--data',
+                                              type=str,
+                                              metavar='<json>',
+                                              help='Metadata as JSON string\n'
+                                                   '(e.g., \'{"key": "value", "region": "us"}\')')
+    node_set_metadata_data_group.add_argument('--filepath',
+                                              type=str,
+                                              metavar='<path>',
+                                              help='Path to JSON file containing metadata')
+    add_profile_argument(node_set_metadata_parser)
+    node_set_metadata_parser.set_defaults(func=node_set_metadata)
+
+    # node delete-metadata
+    node_delete_metadata_parser = node_subparsers.add_parser('delete-metadata',
+                                                              help='Delete metadata from a node',
+                                                              description='Delete metadata from a node.\n'
+                                                                          'Without --key, deletes all metadata.\n'
+                                                                          'With --key, deletes only the specified key(s).')
+    node_delete_metadata_parser.add_argument('nodeid',
+                                             type=str,
+                                             metavar='<nodeid>',
+                                             help='Node ID for the node')
+    node_delete_metadata_parser.add_argument('--key',
+                                             type=str,
+                                             metavar='<keys>',
+                                             help='Comma-separated list of metadata keys to delete\n'
+                                                  '(e.g., "region,name"). If omitted, all metadata is deleted.')
+    add_profile_argument(node_delete_metadata_parser)
+    node_delete_metadata_parser.set_defaults(func=node_delete_metadata)
 
     # Raw API command
     raw_api_parser = subparsers.add_parser('raw-api',

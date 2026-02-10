@@ -59,6 +59,10 @@ The CLI supports the following main commands:
 * `getnodestatus` - Get online/offline status of the node
 * `getnodedetails` - Get detailed information for all nodes or a specific node
 * `removenode` - Remove user node mapping
+* `node add-tags` - Add tags to a node
+* `node remove-tags` - Remove tags from a node
+* `node set-metadata` - Set or update metadata for a node
+* `node delete-metadata` - Delete metadata from a node
 
 ### Parameter Management
 
@@ -105,6 +109,7 @@ For detailed documentation on specific commands, refer to the following files:
 * [Node Sharing](./commands/node_sharing.md)
 * [Parameter Management](./commands/parameters.md)
 * [Node Management](./commands/node_management.md)
+* [Node Tags and Metadata](./commands/node_tags_metadata.md)
 * [Claiming](./commands/claiming.md)
 * [Provisioning](./commands/provisioning.md)
 * [Command Response](./commands/command_response.md)

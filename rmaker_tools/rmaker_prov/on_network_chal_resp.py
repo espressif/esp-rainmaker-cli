@@ -148,7 +148,9 @@ def perform_on_network_chal_resp_flow(device: DeviceInfo,
                                       sec2_username: str = '',
                                       sec2_password: str = '',
                                       sec_ver_override: Optional[int] = None,
-                                      disable_on_success: bool = True) -> Tuple[bool, Optional[str]]:
+                                      disable_on_success: bool = True,
+                                      tags=None,
+                                      metadata=None) -> Tuple[bool, Optional[str]]:
     """
     Perform complete on-network challenge-response flow for user-node mapping
 
@@ -160,6 +162,10 @@ def perform_on_network_chal_resp_flow(device: DeviceInfo,
     :param sec_ver_override: Override security version from device info
     :param disable_on_success: If True, send disable command after successful mapping.
                                Default is True for on-network (device already provisioned).
+    :param tags: Optional list of tags to attach during mapping
+    :type tags: list | None
+    :param metadata: Optional metadata dict to attach during mapping
+    :type metadata: dict | None
     :return: Tuple of (success, node_id)
     """
     try:
@@ -198,7 +204,8 @@ def perform_on_network_chal_resp_flow(device: DeviceInfo,
         # Step 5: Verify response with cloud
         log.info("Verifying response with cloud...")
         success = challenge_response.verify_challenge_response(
-            session, request_id, node_id, challenge_response_bytes)
+            session, request_id, node_id, challenge_response_bytes,
+            tags=tags, metadata=metadata)
         if not success:
             log.error("Cloud verification failed")
             return False, None
@@ -234,7 +241,9 @@ def discover_and_map_device(session: Any,
                            sec_ver_override: Optional[int] = None,
                            discovery_timeout: float = 5.0,
                            interactive: bool = True,
-                           disable_on_success: bool = True) -> Tuple[bool, Optional[str]]:
+                           disable_on_success: bool = True,
+                           tags=None,
+                           metadata=None) -> Tuple[bool, Optional[str]]:
     """
     Discover devices via mDNS and perform challenge-response mapping
 
@@ -249,6 +258,10 @@ def discover_and_map_device(session: Any,
     :param discovery_timeout: mDNS discovery timeout
     :param interactive: Enable interactive device selection
     :param disable_on_success: If True, disable ch_resp on device after successful mapping
+    :param tags: Optional list of tags to attach during mapping
+    :type tags: list | None
+    :param metadata: Optional metadata dict to attach during mapping
+    :type metadata: dict | None
     :return: Tuple of (success, node_id)
     """
     try:
@@ -331,7 +344,9 @@ def discover_and_map_device(session: Any,
             sec2_username=sec2_username,
             sec2_password=sec2_password,
             sec_ver_override=sec_ver_override,
-            disable_on_success=disable_on_success
+            disable_on_success=disable_on_success,
+            tags=tags,
+            metadata=metadata
         )
 
     except ImportError as e:
