@@ -537,6 +537,14 @@ def main():
                               type=str,
                               help='Special RainMaker Node type (e.g., "camera").')
 
+    claim_parser.add_argument("--key_type", metavar='<key_type>',
+                              default="ecdsa",
+                              choices=['rsa', 'ecdsa'],
+                              help='Cryptographic key type for node certificate (Not applicable for Matter claiming)\n'
+                                   'ecdsa: ECDSA P-256 (smaller, faster)\n'
+                                   'rsa: RSA 2048-bit (legacy)\n'
+                                   'Default: ecdsa')
+
     add_profile_argument(claim_parser)
     claim_parser.set_defaults(func=claim_node, parser=claim_parser)
 

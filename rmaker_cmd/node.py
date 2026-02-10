@@ -1664,7 +1664,7 @@ def claim_node(vars=None):
                 sys.exit('Invalid MAC address.')
 
         from rmaker_tools.rmaker_claim.claim import claim
-        claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'], out_dir=vars['outdir'], node_type=vars['type'])
+        claim(port=vars['port'], node_platform=vars['platform'], mac_addr=vars['mac'], flash_address=vars['addr'], matter=vars['matter'], out_dir=vars['outdir'], node_type=vars['type'], key_type=vars['key_type'])
     except Exception as claim_err:
         log.error(claim_err)
         return

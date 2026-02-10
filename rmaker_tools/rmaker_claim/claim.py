@@ -686,7 +686,7 @@ def gen_esp_secure_cert_partition_bin(path, esp_secure_cert_file_name, node_plat
     tlv_priv_key = tlv_priv_key_t(tlv_priv_key_type_t.ESP_SECURE_CERT_DEFAULT_FORMAT_KEY, os.path.join(path, 'device_key.der'), None)
     generate_partition_no_ds(tlv_priv_key, os.path.join(path, 'device_cert.der'), os.path.join(path, 'ca_cert.der'), node_platform, os.path.join(path, esp_secure_cert_file_name))
 
-def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False, out_dir=None, node_type=None):
+def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matter=False, out_dir=None, node_type=None, key_type='ecdsa'):
     """
     Claim the node connected to the given serial port
     (Get cloud credentials)
@@ -709,6 +709,9 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
     :param node_type: Node type to apply (e.g., "camera")
     :type node_type: str
 
+    :param key_type: Cryptographic key type for the node certificate ('rsa' or 'ecdsa')
+    :type key_type: str
+
     :raises Exception: If there is an HTTP issue while claiming
             SSLError: If there is an issue in SSL certificate validation
             ConnectionError: If there is network connection issue
@@ -723,6 +726,9 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
         claim_data_binary_exists = False
         dest_filedir = None
         output_bin_filename = None
+
+        if matter and key_type != 'ecdsa':
+            raise ValueError("key_type is not applicable for Matter claiming")
 
         if not flash_address:
             flash_address = '0x340000'
@@ -776,10 +782,16 @@ def claim(port=None, node_platform=None, mac_addr=None, flash_address=None, matt
 
         start = time.time()
 
-        # Generate private key
+        # Generate private key based on key_type and matter flag
         if not matter:
-            private_key, private_key_bytes = generate_private_key()
+            if key_type == 'rsa':
+                private_key, private_key_bytes = generate_private_key()
+            elif key_type == 'ecdsa':
+                private_key, private_key_bytes = generate_private_ecc_key()
+            else:
+                raise ValueError(f"Unsupported key type: {key_type}")
         else:
+            # Matter always uses ECC key
             private_key, private_key_bytes = generate_private_ecc_key()
 
         print("\nClaiming process started. This may take time.")
