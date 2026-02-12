@@ -2,7 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
-## [1.11.0] - 09-Feb-2-26
+## [1.11.1] - 10-Feb-2026
+- Add support for ecdsa in claiming and make it as default, with an option to fall back to the earlier rsa scheme.
+
+## [1.11.0] - 09-Feb-2026
 - Add support for Tags and Metadata during provisioning and also after mapping a user. Check `provision`
   and `node` commands
 
