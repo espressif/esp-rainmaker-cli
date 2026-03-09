@@ -5,6 +5,8 @@
 # APIs for interpreting and creating protobuf packets for
 # protocomm endpoint with security type protocomm_security1
 
+import base64
+import hashlib
 import sys
 import os
 
@@ -69,10 +71,12 @@ class security_state:
 
 class Security1(Security):
     def __init__(self, pop, verbose):
-        # Initialize state of the security1 FSM
         self.session_state = security_state.REQUEST1
         self.pop = str_to_bytes(pop)
         self.verbose = verbose
+        self.ctr_offset = 0
+        self.shared_key = None
+        self.device_random = None
         Security.__init__(self, self.security1_session)
 
     def security1_session(self, response_data):
@@ -141,8 +145,9 @@ class Security1(Security):
             # XOR with and update Shared Key
             sharedK = a_xor_b(sharedK, digest)
             self._print_verbose(f'Updated Shared Key (Shared key XORed with PoP):\t0x{sharedK.hex()}')
-        # Initialize the encryption engine with Shared Key and initialization vector
-        cipher = Cipher(algorithms.AES(sharedK), modes.CTR(device_random), backend=default_backend())
+        self.shared_key = sharedK
+        self.device_random = bytes(device_random)
+        cipher = Cipher(algorithms.AES(sharedK), modes.CTR(self.device_random), backend=default_backend())
         self.cipher = cipher.encryptor()
 
     def setup1_request(self):
@@ -152,6 +157,7 @@ class Security1(Security):
         setup_req.sec1.msg = proto.sec1_pb2.Session_Command1
         # Encrypt device public key and attach to the request packet
         client_verify = self.cipher.update(self.device_public_key)
+        self.ctr_offset += len(self.device_public_key)
         self._print_verbose(f'Client Proof:\t0x{client_verify.hex()}')
         setup_req.sec1.sc1.client_verify_data = client_verify
         return setup_req.SerializeToString().decode('latin-1')
@@ -162,19 +168,81 @@ class Security1(Security):
         setup_resp.ParseFromString(str_to_bytes(response_data))
         # Ensure security scheme matches
         if setup_resp.sec_ver == proto.session_pb2.SecScheme1:
-            # Read encrypyed device verify string
             device_verify = setup_resp.sec1.sr1.device_verify_data
             self._print_verbose(f'Device Proof:\t0x{device_verify.hex()}')
-            # Decrypt the device verify string
             enc_client_pubkey = self.cipher.update(setup_resp.sec1.sr1.device_verify_data)
-            # Match decrypted string with client public key
+            self.ctr_offset += len(setup_resp.sec1.sr1.device_verify_data)
             if enc_client_pubkey != self.client_public_key:
                 raise RuntimeError('Failed to verify device!')
         else:
             raise RuntimeError('Unsupported security protocol')
 
     def encrypt_data(self, data):
-        return self.cipher.update(data)
+        result = self.cipher.update(data)
+        self.ctr_offset += len(data)
+        return result
 
     def decrypt_data(self, data):
-        return self.cipher.update(data)
+        result = self.cipher.update(data)
+        self.ctr_offset += len(data)
+        return result
+
+    def serialize(self):
+        """
+        Serialize session crypto state for disk persistence.
+        Returns a dict suitable for JSON serialization.
+        """
+        if self.shared_key is None or self.device_random is None:
+            return None
+        pop_hash = ''
+        if len(self.pop) > 0:
+            pop_hash = hashlib.sha256(self.pop).hexdigest()
+        return {
+            'shared_key': base64.b64encode(self.shared_key).decode('ascii'),
+            'device_random': base64.b64encode(self.device_random).decode('ascii'),
+            'ctr_offset': self.ctr_offset,
+            'pop_hash': pop_hash,
+            'sec_ver': 1,
+        }
+
+    @classmethod
+    def deserialize(cls, data, pop='', verbose=False):
+        """
+        Restore a Security1 object from serialized session data.
+        Recreates the AES-CTR cipher and advances the counter to the saved offset.
+
+        :param data: dict from serialize() / session.json
+        :param pop: POP string (used for validation via pop_hash)
+        :param verbose: verbose flag
+        :return: Security1 instance with cipher at correct counter position, or None
+        """
+        try:
+            shared_key = base64.b64decode(data['shared_key'])
+            device_random = base64.b64decode(data['device_random'])
+            ctr_offset = data['ctr_offset']
+        except (KeyError, Exception):
+            return None
+
+        pop_bytes = str_to_bytes(pop) if pop else b''
+        if data.get('pop_hash'):
+            current_pop_hash = hashlib.sha256(pop_bytes).hexdigest() if len(pop_bytes) > 0 else ''
+            if current_pop_hash != data['pop_hash']:
+                return None
+
+        obj = cls.__new__(cls)
+        obj.pop = pop_bytes
+        obj.verbose = verbose
+        obj.session_state = security_state.FINISHED
+        obj.shared_key = shared_key
+        obj.device_random = device_random
+        obj.ctr_offset = 0
+
+        cipher = Cipher(algorithms.AES(shared_key), modes.CTR(device_random), backend=default_backend())
+        obj.cipher = cipher.encryptor()
+
+        if ctr_offset > 0:
+            obj.cipher.update(b'\x00' * ctr_offset)
+            obj.ctr_offset = ctr_offset
+
+        Security.__init__(obj, obj.security1_session)
+        return obj

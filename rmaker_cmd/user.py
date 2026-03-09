@@ -487,9 +487,13 @@ def add_custom_profile(vars=None):
 
     config = configmanager.Config()
 
+    cache_enabled = vars.get('cache', False)
+
     try:
-        config.profile_manager.create_custom_profile(profile_name, base_url, description)
+        config.profile_manager.create_custom_profile(profile_name, base_url, description, cache_enabled=cache_enabled)
         print(f"Created custom profile '{profile_name}' with base URL '{base_url}'")
+        if cache_enabled:
+            print(f"Node cache: enabled")
         print(f"Note: Custom profiles require --user_name for login (UI login not supported)")
 
     except ValueError as e:

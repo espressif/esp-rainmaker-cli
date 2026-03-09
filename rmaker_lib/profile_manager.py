@@ -271,7 +271,7 @@ class ProfileManager:
         
         return all_profiles
     
-    def create_custom_profile(self, profile_name, base_url, description=None):
+    def create_custom_profile(self, profile_name, base_url, description=None, cache_enabled=False):
         """Create a new custom profile."""
         self._validate_profile_name(profile_name)
         
@@ -292,7 +292,8 @@ class ProfileManager:
             'description': description or f'Custom profile: {profile_name}',
             'host': base_url,
             'builtin': False,
-            'ui_login_supported': False  # Custom profiles don't support UI login
+            'ui_login_supported': False,
+            'node_cache_enabled': cache_enabled,
         }
         
         profiles_config = self._load_profiles_config()
@@ -383,7 +384,43 @@ class ProfileManager:
         """Check if a profile has stored tokens."""
         idtoken, refreshtoken, accesstoken = self.get_profile_tokens(profile_name)
         return accesstoken is not None
-    
+
+    def set_cache_enabled(self, profile_name, enabled):
+        """Enable or disable node cache for a profile."""
+        profiles_config = self._load_profiles_config()
+
+        if profile_name in profiles_config['profiles']:
+            profiles_config['profiles'][profile_name]['node_cache_enabled'] = enabled
+        elif profile_name in profiles_config['custom_profiles']:
+            profiles_config['custom_profiles'][profile_name]['node_cache_enabled'] = enabled
+        else:
+            raise ValueError(f"Profile '{profile_name}' not found")
+
+        self._save_profiles_config(profiles_config)
+        state = 'enabled' if enabled else 'disabled'
+        log.info(f"Node cache {state} for profile '{profile_name}'")
+
+    def is_cache_enabled(self, profile_name):
+        """Check if node cache is enabled for a profile."""
+        try:
+            config = self.get_profile_config(profile_name)
+            return config.get('node_cache_enabled', False)
+        except Exception:
+            return False
+
+    def set_profile_setting(self, profile_name, key, value):
+        """Set an arbitrary setting on a profile config."""
+        profiles_config = self._load_profiles_config()
+
+        if profile_name in profiles_config['profiles']:
+            profiles_config['profiles'][profile_name][key] = value
+        elif profile_name in profiles_config['custom_profiles']:
+            profiles_config['custom_profiles'][profile_name][key] = value
+        else:
+            raise ValueError(f"Profile '{profile_name}' not found")
+
+        self._save_profiles_config(profiles_config)
+
     def _migrate_to_profiles_subdir(self):
         """
         Migrate existing profile files to profiles/ subdirectory for better organization.

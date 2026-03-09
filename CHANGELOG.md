@@ -2,6 +2,18 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.12.0] - 19-Feb-2026
+### Added
+- Local node cache layer for faster `--local` control operations:
+  - Caches node details, config, POP, and local control capability per profile/user
+  - Disk-based session reuse to skip X25519 handshake on repeated commands
+  - Auto-POP resolution from cache, eliminating need for prior cloud `getparams` call
+  - Empirical capability discovery (probes sec0 first, then sec1, caches result)
+  - Cache disabled by default; enable via `cache enable` or `profile add --cache`
+- New `cache` CLI command group: `enable`, `disable`, `show`, `clear`
+- `--no-cache` flag on `getparams`, `setparams`, `getnodeconfig` for one-shot cache bypass
+- `RM_NODE_CACHE` and `RM_NODE_CACHE_DIR` environment variables for automation control
+
 ## [1.11.1] - 10-Feb-2026
 - Add support for ecdsa in claiming and make it as default, with an option to fall back to the earlier rsa scheme.
 

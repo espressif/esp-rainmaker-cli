@@ -79,12 +79,24 @@ esp-rainmaker-cli profile add company-staging \
 esp-rainmaker-cli profile add company-prod \
   --base-url https://rainmaker.company.com/api/ \
   --description "Company Production Environment"
+
+# With node cache enabled
+esp-rainmaker-cli profile add company-prod \
+  --base-url https://rainmaker.company.com/api/ \
+  --cache
 ```
+
+**Options:**
+- `--base-url` (required): Your ESP RainMaker API endpoint
+- `--description`: Human-readable description of the profile
+- `--cache`: Enable node cache for this profile (stores POP, sessions, and node data on disk for faster local control)
 
 **Requirements for custom profiles:**
 - Must provide `--base-url` parameter
 - Base URL should point to your ESP RainMaker API endpoint
 - Profile names must be alphanumeric with optional `_`, `-`, `.`, `#` characters
+
+> **Note:** Node cache is disabled by default. You can enable it at profile creation time with `--cache`, or later with `esp-rainmaker-cli cache enable`. See [Cache Management](cache.md) for details.
 
 ### Remove Custom Profile
 

@@ -36,10 +36,12 @@ esp-rainmaker-cli getparams <nodeid> --local --pop <pop_value>
 
 Local control options:
 - `--local`: Enable local control mode (5-10x faster than cloud)
+- `--auto`: Try local control first, fall back to cloud if local fails
 - `--pop <value>`: Proof of Possession for device authentication
 - `--transport <type>`: Transport protocol (http/https/ble, default: http)
 - `--port <number>`: Port number (default: 8080)
 - `--sec_ver <version>`: Security version (0/1/2, default: 1)
+- `--no-cache`: Skip local cache for this invocation
 
 Example:
 ```bash
@@ -103,10 +105,12 @@ esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": t
 
 Local control options for setparams:
 - `--local`: Enable local control mode (8-10x faster than cloud)
+- `--auto`: Try local control first, fall back to cloud if local fails
 - `--pop <value>`: Proof of Possession for device authentication
 - `--transport <type>`: Transport protocol (http/https/ble, default: http)
 - `--port <number>`: Port number (default: 8080)
 - `--sec_ver <version>`: Security version (0/1/2, default: 1)
+- `--no-cache`: Skip local cache for this invocation
 
 **Performance comparison for setparams:**
 - Cloud API: 800-3000ms response time
@@ -278,6 +282,28 @@ esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 --data '{"Light": {"Power": t
 # Get current state quickly
 esp-rainmaker-cli getparams N7FXSyMjeYFhWcRyDig7t3 --local --pop 2c4d470d
 ```
+
+## Auto Transport Mode (`--auto`)
+
+The `--auto` flag lets you get the fastest available transport without worrying about whether the device is reachable locally:
+
+```bash
+# Get params -- tries local first, falls back to cloud
+esp-rainmaker-cli getparams <nodeid> --auto
+
+# Set params
+esp-rainmaker-cli setparams <nodeid> --data '{"Light": {"Power": true}}' --auto
+```
+
+With cache enabled, `--auto` resolves POP from cache (or fetches it from the cloud on the first call), attempts local control with session reuse, and falls back to the cloud API if local fails. Combined with session caching, subsequent calls complete in under a second when the device is reachable locally.
+
+The `--no-cache` flag can be used with `--auto` or `--local` to skip cache for a single invocation:
+
+```bash
+esp-rainmaker-cli getparams <nodeid> --auto --no-cache
+```
+
+For full details on caching, see [Cache Management](cache.md).
 
 ## Raw Local Control Mode (--local-raw)
 

@@ -16,6 +16,7 @@ from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
 from rmaker_cmd.group import group_add, group_remove, group_edit, group_list, group_show, group_add_nodes, group_remove_nodes, group_list_nodes
+from rmaker_cmd.cache import cache_manage
 
 # Import the version
 from rainmaker.version import VERSION
@@ -102,6 +103,9 @@ def main():
                                     type=str,
                                     metavar='<description>',
                                     help='Description for the custom profile (optional)')
+    profile_add_parser.add_argument('--cache',
+                                    action='store_true',
+                                    help='Enable node cache for this profile')
     profile_add_parser.set_defaults(func=profile_add)
 
     # profile remove
@@ -111,6 +115,33 @@ def main():
                                        metavar='<profile_name>',
                                        help='Name of the profile to remove')
     profile_remove_parser.set_defaults(func=profile_remove)
+
+    # Cache management commands
+    cache_parser = subparsers.add_parser("cache",
+                                         help="Manage local node cache")
+    cache_subparsers = cache_parser.add_subparsers(dest='cache_command', help='Cache operations')
+
+    cache_enable_parser = cache_subparsers.add_parser('enable', help='Enable node cache for current profile')
+    cache_enable_parser.set_defaults(func=cache_manage)
+
+    cache_disable_parser = cache_subparsers.add_parser('disable', help='Disable node cache for current profile')
+    cache_disable_parser.set_defaults(func=cache_manage)
+
+    cache_show_parser = cache_subparsers.add_parser('show', help='Show cached data')
+    cache_show_parser.add_argument('--node',
+                                   type=str,
+                                   metavar='<nodeid>',
+                                   help='Node ID to show cache for (omit for all)')
+    add_profile_argument(cache_show_parser)
+    cache_show_parser.set_defaults(func=cache_manage)
+
+    cache_clear_parser = cache_subparsers.add_parser('clear', help='Clear cached data')
+    cache_clear_parser.add_argument('--node',
+                                    type=str,
+                                    metavar='<nodeid>',
+                                    help='Node ID to clear cache for (omit for all)')
+    add_profile_argument(cache_clear_parser)
+    cache_clear_parser.set_defaults(func=cache_manage)
 
     signup_parser = subparsers.add_parser("signup",
                                           help="Sign up for ESP RainMaker")
@@ -245,8 +276,8 @@ def main():
     getnodeconfig_parser.add_argument('--sec_ver',
                                      type=int,
                                      choices=[0, 1, 2],
-                                     default=1,
-                                     help='Security version for local control')
+                                     default=None,
+                                     help='Security version for local control (default: 1)')
     getnodeconfig_parser.add_argument('--local-raw',
                                      action='store_true',
                                      help='Use local control via raw endpoints (get_config with fragmentation) instead of esp_local_ctrl')
@@ -259,6 +290,13 @@ def main():
     getnodeconfig_parser.add_argument('--proxy-report',
                                      action='store_true',
                                      help='Automatically use current timestamp and POST signed response to proxy API endpoint')
+    getnodeconfig_parser.add_argument('--auto',
+                                     action='store_true',
+                                     help='Try local control first, fall back to cloud if local fails')
+    getnodeconfig_parser.add_argument('--no-cache',
+                                     action='store_true',
+                                     dest='no_cache',
+                                     help='Skip local cache for this invocation')
     add_profile_argument(getnodeconfig_parser)
     getnodeconfig_parser.set_defaults(func=get_node_config)
 
@@ -308,8 +346,8 @@ def main():
     setparams_parser.add_argument('--sec_ver',
                                  type=int,
                                  choices=[0, 1, 2],
-                                 default=1,
-                                 help='Security version for local control')
+                                 default=None,
+                                 help='Security version for local control (default: 1)')
     setparams_parser.add_argument('--local-raw',
                                  action='store_true',
                                  help='Use local control via raw endpoints (get_params/set_params) instead of esp_local_ctrl')
@@ -317,7 +355,13 @@ def main():
                                  type=str,
                                  help='Device name for BLE transport (e.g., PROV_aaf824). Required when using --transport ble')
 
-    # Note: setparams_data_group is mutually exclusive group, so we add profile to the parent
+    setparams_parser.add_argument('--auto',
+                                 action='store_true',
+                                 help='Try local control first, fall back to cloud if local fails')
+    setparams_parser.add_argument('--no-cache',
+                                 action='store_true',
+                                 dest='no_cache',
+                                 help='Skip local cache for this invocation')
     add_profile_argument(setparams_parser)
     setparams_parser.set_defaults(func=set_params)
 
@@ -345,8 +389,8 @@ def main():
     getparams_parser.add_argument('--sec_ver',
                                  type=int,
                                  choices=[0, 1, 2],
-                                 default=1,
-                                 help='Security version for local control')
+                                 default=None,
+                                 help='Security version for local control (default: 1)')
     getparams_parser.add_argument('--local-raw',
                                  action='store_true',
                                  help='Use local control via raw endpoints (get_params/set_params) instead of esp_local_ctrl')
@@ -362,6 +406,13 @@ def main():
     getparams_parser.add_argument('--init',
                                  action='store_true',
                                  help='Use initparams API endpoint instead of params (only with --proxy-report)')
+    getparams_parser.add_argument('--auto',
+                                 action='store_true',
+                                 help='Try local control first, fall back to cloud if local fails')
+    getparams_parser.add_argument('--no-cache',
+                                 action='store_true',
+                                 dest='no_cache',
+                                 help='Skip local cache for this invocation')
     add_profile_argument(getparams_parser)
     getparams_parser.set_defaults(func=get_params)
 
