@@ -32,6 +32,192 @@ except ImportError as err:
 
 MAX_HTTP_CONNECTION_RETRIES = 5
 
+
+def _get_cache_objects(vars_dict):
+    """
+    Create NodeCache and SessionStore instances based on current profile/user.
+    Returns (node_cache, session_store) or (None, None) if caching is disabled.
+    """
+    try:
+        from rmaker_lib.node_cache import NodeCache, is_cache_enabled, _get_cache_base_dir
+        from rmaker_lib.session_store import SessionStore
+
+        no_cache_flag = vars_dict.get('no_cache', False)
+        profile_override = vars_dict.get('profile')
+
+        config = configmanager.Config(profile_override=profile_override) if profile_override else configmanager.Config()
+        profile_name = config.get_current_profile_name()
+        profile_config = config.get_profile_config_for_current()
+
+        if not is_cache_enabled(profile_config, no_cache_flag):
+            return None, None
+
+        try:
+            user_id = config.get_user_id()
+        except Exception:
+            user_id = 'unknown'
+
+        base_dir = _get_cache_base_dir(profile_config)
+        cache_dir = os.path.join(base_dir, profile_name, user_id or 'unknown')
+
+        nc = NodeCache(profile_name, user_id, enabled=True)
+        ss = SessionStore(cache_dir, enabled=True)
+        return nc, ss
+    except Exception as e:
+        log.debug(f"Failed to initialize cache objects: {e}")
+        return None, None
+
+
+def _build_local_options_with_cache(vars_dict, node_cache=None, session_store=None):
+    """
+    Build local_options dict, enriched with cache objects and auto-POP resolution.
+    """
+    pop = vars_dict.get('pop', '')
+    raw_sec_ver = vars_dict.get('sec_ver')
+    explicit_sec_ver = raw_sec_ver is not None
+    sec_ver = raw_sec_ver if raw_sec_ver is not None else 1
+    nodeid = vars_dict.get('nodeid', '')
+
+    if node_cache and not pop:
+        capability = node_cache.get_local_control_capability(nodeid)
+        if capability:
+            if not capability.get('supported', True):
+                log.info(f"Node {nodeid} known to not support local control (cached)")
+                return None
+
+            if capability.get('pop_required') is False:
+                pop = ''
+                sec_ver = capability.get('sec_ver', 0)
+                explicit_sec_ver = True
+            elif capability.get('sec_ver') is not None and not explicit_sec_ver:
+                sec_ver = capability['sec_ver']
+
+        if not pop:
+            lc_info = node_cache.get_local_control_info(nodeid)
+            if lc_info and lc_info.get('pop'):
+                pop = lc_info['pop']
+                log.debug(f"Using cached POP for node {nodeid}")
+                if lc_info.get('sec_ver') is not None and not explicit_sec_ver:
+                    sec_ver = lc_info['sec_ver']
+
+        if not pop and not explicit_sec_ver:
+            try:
+                from rmaker_lib.profile_utils import get_session_with_profile
+                s = get_session_with_profile(vars_dict)
+                n = node.Node(nodeid, s)
+                cloud_params = n.get_node_params()
+                if cloud_params:
+                    from rmaker_lib.node_cache import extract_local_control_info
+                    lc_info = extract_local_control_info(cloud_params)
+                    if lc_info:
+                        node_cache.set_local_control_info(nodeid, lc_info)
+                        pop = lc_info.get('pop', '')
+                        if lc_info.get('sec_ver') is not None:
+                            sec_ver = lc_info['sec_ver']
+                        log.debug(f"Resolved POP from cloud for node {nodeid}")
+            except Exception as e:
+                log.debug(f"Failed to auto-resolve POP from cloud: {e}")
+
+    local_options = {
+        'pop': pop,
+        'transport': vars_dict.get('transport', 'http'),
+        'port': vars_dict.get('port', 8080),
+        'sec_ver': sec_ver,
+        'local_raw': vars_dict.get('local_raw', False),
+        'device_name': vars_dict.get('device_name', None),
+        'node_cache': node_cache,
+        'session_store': session_store,
+        'explicit_sec_ver': explicit_sec_ver,
+    }
+    return local_options
+
+def _try_local_operation(vars_dict, operation, data=None):
+    """
+    Attempt a local control operation. Returns the result on success, None on failure.
+    Used by --auto to try local before falling back to cloud.
+
+    On security/POP failure, refreshes POP from cloud and retries once.
+    Transport failures (device unreachable) skip the cloud POP refresh
+    to avoid unnecessary cloud interaction for offline devices.
+    """
+    try:
+        from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync, ERR_SECURITY
+
+        nc, ss = _get_cache_objects(vars_dict)
+        local_options = _build_local_options_with_cache(vars_dict, nc, ss)
+        if local_options is None:
+            log.debug("Auto: node does not support local control (cached), skipping local")
+            return None
+
+        nodeid = vars_dict['nodeid']
+        used_pop = local_options.get('pop', '')
+
+        error_info = {}
+        local_options['error_info'] = error_info
+
+        result = run_local_control_sync(
+            nodeid, operation, data, **local_options
+        )
+
+        if result is not None:
+            log.info("Auto: local control succeeded")
+            if nc:
+                if operation == 'get_config':
+                    nc.set_node_config(nodeid, result)
+                elif operation == 'get_params':
+                    from rmaker_lib.node_cache import extract_local_control_info
+                    lc_info = extract_local_control_info(result)
+                    if lc_info:
+                        nc.set_local_control_info(nodeid, lc_info)
+            return result
+
+        err_reason = error_info.get('reason')
+        if nc and used_pop and err_reason == ERR_SECURITY:
+            new_pop = None
+            try:
+                log.debug("Auto: security failure, refreshing POP cache from cloud")
+                s = get_session_with_profile(vars_dict)
+                n = node.Node(nodeid, s)
+                cloud_params = n.get_node_params()
+                if cloud_params:
+                    from rmaker_lib.node_cache import extract_local_control_info
+                    lc_info = extract_local_control_info(cloud_params)
+                    if lc_info:
+                        nc.set_local_control_info(nodeid, lc_info)
+                        new_pop = lc_info.get('pop', '')
+            except Exception:
+                pass
+
+            if new_pop and new_pop != used_pop:
+                log.debug("Auto: POP changed, retrying local control with new POP")
+                if ss:
+                    ss.invalidate_session(nodeid)
+                local_options = _build_local_options_with_cache(vars_dict, nc, ss)
+                if local_options is not None:
+                    error_info = {}
+                    local_options['error_info'] = error_info
+                    result = run_local_control_sync(
+                        nodeid, operation, data, **local_options
+                    )
+                    if result is not None:
+                        log.info("Auto: local control succeeded on retry with refreshed POP")
+                        if operation == 'get_config':
+                            nc.set_node_config(nodeid, result)
+                        elif operation == 'get_params':
+                            from rmaker_lib.node_cache import extract_local_control_info
+                            lc_info = extract_local_control_info(result)
+                            if lc_info:
+                                nc.set_local_control_info(nodeid, lc_info)
+                        return result
+        elif err_reason:
+            log.debug(f"Auto: local control failed with {err_reason}, skipping POP refresh")
+
+        return None
+    except Exception as e:
+        log.debug(f"Auto: local control attempt failed: {e}")
+        return None
+
+
 def _format_schedule(schedule):
     """
     Helper function to format schedule information in a readable way
@@ -234,16 +420,30 @@ def get_node_details(vars=None):
                 print('No node details available or user is not associated with any nodes.')
                 return
 
+        try:
+            nc, _ = _get_cache_objects(vars or {})
+            if nc and node_details and 'node_details' in node_details:
+                for ninfo in node_details['node_details']:
+                    nid = ninfo.get('id')
+                    if nid:
+                        nc.set_node_details(nid, ninfo)
+                        params_data = ninfo.get('params', {})
+                        if params_data:
+                            from rmaker_lib.node_cache import extract_local_control_info
+                            lc_info = extract_local_control_info(params_data)
+                            if lc_info:
+                                nc.set_local_control_info(nid, lc_info)
+        except Exception:
+            pass
+
         if raw_output:
-            # Print raw JSON if requested
             print(json.dumps(node_details, indent=4))
             return
 
-        # Print formatted node details
         for idx, node_info in enumerate(node_details['node_details'], 1):
             node_id = node_info.get('id', 'Unknown')
             _print_node_details(node_id, node_info, idx)
-            print()  # Add empty line between nodes
+            print()
     except Exception as e:
         error_msg = f"Error retrieving node details: {str(e)}"
         log.error(error_msg)
@@ -1050,7 +1250,7 @@ def get_node_config(vars=None):
                     'pop': vars.get('pop', ''),
                     'transport': vars.get('transport', 'ble'),
                     'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 1),
+                    'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1,
                     'device_name': vars.get('device_name', None),
                     'timestamp': timestamp
                 }
@@ -1064,26 +1264,39 @@ def get_node_config(vars=None):
                 import traceback
                 log.debug(traceback.format_exc())
 
-        # Check if local control is requested (esp_local_ctrl)
+        elif vars and vars.get('auto', False):
+            node_config = _try_local_operation(vars, 'get_config')
+            if node_config is None:
+                log.info("Auto: local failed, falling back to cloud")
+                s = get_session_with_profile(vars or {})
+                n = node.Node(vars['nodeid'], s)
+                node_config = n.get_node_config()
+                if node_config:
+                    try:
+                        nc, _ = _get_cache_objects(vars or {})
+                        if nc:
+                            nc.set_node_config(vars['nodeid'], node_config)
+                    except Exception:
+                        pass
+
         elif vars and vars.get('local', False):
             try:
-                # Try the proven standalone script integration first
                 from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync
 
-                local_options = {
-                    'pop': vars.get('pop', ''),
-                    'transport': vars.get('transport', 'http'),
-                    'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 1)
-                }
-
-                node_config = run_local_control_sync(
-                    vars['nodeid'], 'get_config', **local_options
-                )
+                nc, ss = _get_cache_objects(vars)
+                local_options = _build_local_options_with_cache(vars, nc, ss)
+                if local_options is None:
+                    log.error("Node does not support local control (cached)")
+                    node_config = None
+                else:
+                    node_config = run_local_control_sync(
+                        vars['nodeid'], 'get_config', **local_options
+                    )
+                    if node_config and nc:
+                        nc.set_node_config(vars['nodeid'], node_config)
 
             except Exception as e:
                 log.debug(f"Standalone integration failed: {e}")
-                # Fallback to direct implementation
                 try:
                     from rmaker_lib.local_control import run_local_control_operation
 
@@ -1091,7 +1304,7 @@ def get_node_config(vars=None):
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver', 1)
+                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1
                     }
 
                     node_config = run_local_control_operation(
@@ -1099,14 +1312,13 @@ def get_node_config(vars=None):
                     )
                 except Exception as e2:
                     log.debug(f"Direct local control failed: {e2}")
-                    # Final fallback to simple implementation
                     from rmaker_lib.simple_local_control import run_simple_local_control_operation
 
                     local_options = {
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver', 0)  # Force security 0 for simple mode
+                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0
                     }
 
                     log.info("Using simplified local control (security level 0)")
@@ -1114,10 +1326,17 @@ def get_node_config(vars=None):
                         vars['nodeid'], 'get_config', **local_options
                     )
         else:
-            # Use cloud API
             s = get_session_with_profile(vars or {})
             n = node.Node(vars['nodeid'], s)
             node_config = n.get_node_config()
+
+            if node_config:
+                try:
+                    nc, _ = _get_cache_objects(vars or {})
+                    if nc:
+                        nc.set_node_config(vars['nodeid'], node_config)
+                except Exception:
+                    pass
 
     except Exception as get_nodes_err:
         log.error(get_nodes_err)
@@ -1245,21 +1464,69 @@ def set_params(vars=None):
     node_ids = [node_id.strip() for node_id in vars['nodeid'].split(',')]
 
     try:
-        # Check if local control is requested (either --local or --local-raw)
-        if vars and (vars.get('local', False) or vars.get('local_raw', False)):
+        if vars and vars.get('auto', False):
+            all_succeeded = True
+            for node_id in node_ids:
+                auto_vars = dict(vars)
+                auto_vars['nodeid'] = node_id
+                result = _try_local_operation(auto_vars, 'set_params', data)
+                if result is None or result is False:
+                    all_succeeded = False
+                    break
+
+            if all_succeeded and result is not None:
+                if len(node_ids) == 1:
+                    print('Node parameters updated successfully via local control.')
+                else:
+                    print(f'Local control: {len(node_ids)}/{len(node_ids)} nodes updated successfully.')
+                return
+            else:
+                log.info("Auto: local failed, falling back to cloud")
+
+            s = get_session_with_profile(vars or {})
+            node_params_list = []
+            for node_id in node_ids:
+                node_params_list.append({
+                    "node_id": node_id,
+                    "payload": data
+                })
+            result = node.Node.set_node_params_multiple(node_params_list, s)
+
+            if len(node_ids) == 1:
+                if result.get("success", True):
+                    print('Node state updated successfully.')
+                else:
+                    failed = result.get("failed_nodes", [])
+                    if failed:
+                        print(f'Failed to update node: {failed[0].get("description", "Unknown error")}')
+                    else:
+                        print('Failed to update node state.')
+            else:
+                successful_nodes = result.get("successful_nodes", [])
+                failed_nodes_list = result.get("failed_nodes", [])
+                total_nodes = len(node_ids)
+                if result.get("success", True):
+                    print(f'Parameters updated successfully for all {total_nodes} nodes.')
+                else:
+                    print(f'Parameters updated for {len(successful_nodes)} of {total_nodes} nodes.')
+                    if failed_nodes_list:
+                        print('Failed nodes:')
+                        for failed in failed_nodes_list:
+                            nid = failed.get("node_id", "unknown")
+                            desc = failed.get("description", "Unknown error")
+                            print(f'  - {nid}: {desc}')
+            return
+
+        elif vars and (vars.get('local', False) or vars.get('local_raw', False)):
             try:
                 from rmaker_lib.local_control import run_local_control_operation
 
-                local_options = {
-                    'pop': vars.get('pop', ''),
-                    'transport': vars.get('transport', 'http'),
-                    'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 1),
-                    'local_raw': vars.get('local_raw', False),
-                    'device_name': vars.get('device_name', None)
-                }
+                nc, ss = _get_cache_objects(vars)
+                local_options = _build_local_options_with_cache(vars, nc, ss)
+                if local_options is None:
+                    print('Node does not support local control (cached).')
+                    return
 
-                # For local control, handle multiple nodes individually
                 success_count = 0
                 failed_nodes = []
 
@@ -1291,7 +1558,7 @@ def set_params(vars=None):
                     'pop': vars.get('pop', ''),
                     'transport': vars.get('transport', 'http'),
                     'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 0),  # Force security 0 for simple mode
+                    'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0,
                     'local_raw': vars.get('local_raw', False),
                     'device_name': vars.get('device_name', None)
                 }
@@ -1406,38 +1673,54 @@ def get_params(vars=None):
         params = None
         proxy_report = vars.get('proxy_report', False) if vars else False
 
-        # Check if local control is requested (either --local or --local-raw)
-        if vars and (vars.get('local', False) or vars.get('local_raw', False)):
+        if vars and vars.get('auto', False):
+            params = _try_local_operation(vars, 'get_params')
+            if params is None:
+                log.info("Auto: local failed, falling back to cloud")
+                s = get_session_with_profile(vars or {})
+                n = node.Node(vars['nodeid'], s)
+                params = n.get_node_params()
+                if params:
+                    try:
+                        nc, _ = _get_cache_objects(vars or {})
+                        if nc:
+                            from rmaker_lib.node_cache import extract_local_control_info
+                            lc_info = extract_local_control_info(params)
+                            if lc_info:
+                                nc.set_local_control_info(vars['nodeid'], lc_info)
+                    except Exception:
+                        pass
+
+        elif vars and (vars.get('local', False) or vars.get('local_raw', False)):
             try:
-                # Try the proven standalone script integration first
                 from rmaker_tools.rmaker_local_ctrl.integration import run_local_control_sync
                 import time
 
-                # Handle timestamp: if proxy_report is set and no timestamp provided, use current time
-                # If timestamp is 0, use current system time
-                # For proxy_report with local_raw: if timestamp is explicitly provided, use original flow (send to node)
-                # Otherwise, use ch_resp workaround (get params without timestamp, sign via ch_resp)
                 timestamp = vars.get('timestamp', None)
-                timestamp_explicitly_provided = 'timestamp' in vars  # Check if --timestamp was explicitly passed
+                timestamp_explicitly_provided = 'timestamp' in vars
                 if proxy_report and timestamp is None:
                     timestamp = int(time.time())
                 elif timestamp == 0:
                     timestamp = int(time.time())
 
-                local_options = {
-                    'pop': vars.get('pop', ''),
-                    'transport': vars.get('transport', 'http'),
-                    'port': vars.get('port', 8080),
-                    'sec_ver': vars.get('sec_ver', 1),
-                    'local_raw': vars.get('local_raw', False),
-                    'device_name': vars.get('device_name', None),
-                    'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,  # Use workaround only if timestamp not explicitly provided
-                    'proxy_report': proxy_report  # Pass proxy_report flag
-                }
+                nc, ss = _get_cache_objects(vars)
+                local_options = _build_local_options_with_cache(vars, nc, ss)
+                if local_options is None:
+                    log.error("Node does not support local control (cached)")
+                    params = None
+                else:
+                    local_options['timestamp'] = timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp
+                    local_options['proxy_report'] = proxy_report
 
-                params = run_local_control_sync(
-                    vars['nodeid'], 'get_params', **local_options
-                )
+                    params = run_local_control_sync(
+                        vars['nodeid'], 'get_params', **local_options
+                    )
+
+                    if params and nc:
+                        from rmaker_lib.node_cache import extract_local_control_info
+                        lc_info = extract_local_control_info(params)
+                        if lc_info:
+                            nc.set_local_control_info(vars['nodeid'], lc_info)
 
             except Exception as e:
                 log.debug(f"Standalone integration failed: {e}")
@@ -1461,11 +1744,11 @@ def get_params(vars=None):
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver', 1),
+                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1,
                         'local_raw': vars.get('local_raw', False),
                         'device_name': vars.get('device_name', None),
-                        'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,  # Use workaround only if timestamp not explicitly provided
-                        'proxy_report': proxy_report  # Pass proxy_report flag
+                        'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,
+                        'proxy_report': proxy_report
                     }
 
                     params = run_local_control_operation(
@@ -1473,16 +1756,11 @@ def get_params(vars=None):
                     )
                 except Exception as e2:
                     log.debug(f"Direct local control failed: {e2}")
-                    # Final fallback to simple implementation
                     from rmaker_lib.simple_local_control import run_simple_local_control_operation
                     import time
 
-                    # Handle timestamp: if proxy_report is set and no timestamp provided, use current time
-                    # If timestamp is 0, use current system time
-                    # For proxy_report with local_raw: if timestamp is explicitly provided, use original flow (send to node)
-                    # Otherwise, use ch_resp workaround (get params without timestamp, sign via ch_resp)
                     timestamp = vars.get('timestamp', None)
-                    timestamp_explicitly_provided = 'timestamp' in vars  # Check if --timestamp was explicitly passed
+                    timestamp_explicitly_provided = 'timestamp' in vars
                     if proxy_report and timestamp is None:
                         timestamp = int(time.time())
                     elif timestamp == 0:
@@ -1492,11 +1770,11 @@ def get_params(vars=None):
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver', 0),  # Force security 0 for simple mode
+                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0,
                         'local_raw': vars.get('local_raw', False),
                         'device_name': vars.get('device_name', None),
-                        'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,  # Use workaround only if timestamp not explicitly provided
-                        'proxy_report': proxy_report  # Pass proxy_report flag
+                        'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,
+                        'proxy_report': proxy_report
                     }
 
                     log.info("Using simplified local control (security level 0)")
@@ -1504,10 +1782,20 @@ def get_params(vars=None):
                         vars['nodeid'], 'get_params', **local_options
                     )
         else:
-            # Use cloud API
             s = get_session_with_profile(vars or {})
             n = node.Node(vars['nodeid'], s)
             params = n.get_node_params()
+
+            if params:
+                try:
+                    nc, _ = _get_cache_objects(vars or {})
+                    if nc:
+                        from rmaker_lib.node_cache import extract_local_control_info
+                        lc_info = extract_local_control_info(params)
+                        if lc_info:
+                            nc.set_local_control_info(vars['nodeid'], lc_info)
+                except Exception:
+                    pass
 
     except SSLError:
         error_msg = "SSL verification failed"

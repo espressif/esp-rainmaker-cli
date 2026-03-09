@@ -29,10 +29,12 @@ All ESP RainMaker CLI commands that support `--local` flag:
 
 ```bash
 --local                 # Enable local control mode
+--auto                  # Try local first, fall back to cloud if local fails
 --pop <value>          # Proof of Possession for security v1
 --transport <type>     # Transport: http/https/ble (default: http)
 --port <number>        # Port number (default: 8080)
 --sec_ver <version>    # Security version: 0/1/2 (default: 1)
+--no-cache             # Skip local cache for this invocation
 ```
 
 ### Get Node Configuration
@@ -69,6 +71,75 @@ esp-rainmaker-cli setparams N7FXSyMjeYFhWcRyDig7t3 \
   '{"Light": {"Power": true, "Brightness": 75}}' \
   --local --pop 2c4d470d
 ```
+
+## Auto Transport (`--auto`)
+
+The `--auto` flag provides the best of both worlds: it attempts local control first for speed, and automatically falls back to the cloud API if local control is unavailable.
+
+```bash
+# Get params -- tries local first, falls back to cloud
+esp-rainmaker-cli getparams <node_id> --auto
+
+# Set params -- same behavior
+esp-rainmaker-cli setparams <node_id> --data '{"Light": {"Power": true}}' --auto
+
+# Get config
+esp-rainmaker-cli getnodeconfig <node_id> --auto
+```
+
+### How `--auto` Works
+
+1. If cache is enabled and POP is not cached, fetches POP from cloud and caches it.
+2. Attempts local control using cached session/IP if available.
+3. If local succeeds, returns the result (sub-second with cached session).
+4. If local fails (device offline, not on network), falls back to cloud API.
+
+### When to Use `--auto` vs `--local`
+
+| Flag | Behavior | Best For |
+|------|----------|----------|
+| `--local` | Local only, no cloud fallback | Guaranteed local-only operation, offline use |
+| `--auto` | Local first, cloud fallback | Home automation, scripts that must always succeed |
+
+`--auto` can be combined with `--pop`, `--transport`, `--port`, `--sec_ver`, and `--no-cache`.
+
+## Caching and Session Reuse
+
+When cache is enabled, the CLI stores POP, node configuration, and session crypto state on disk. This eliminates redundant cloud API calls and enables session reuse across CLI invocations.
+
+### POP Auto-Resolution
+
+With cache enabled, you no longer need to pass `--pop` on every command:
+
+```bash
+# First call: POP is fetched from cloud and cached
+esp-rainmaker-cli getparams <node_id> --local
+
+# Subsequent calls: POP is read from cache, no cloud call needed
+esp-rainmaker-cli setparams <node_id> --data '{"Light": {"Power": true}}' --local
+```
+
+### Session Reuse with IP Caching
+
+After the first local control connection, the CLI saves the session crypto state and the device's resolved IP address. Subsequent commands connect directly by IP (skipping mDNS resolution) and reuse the session (skipping the security handshake):
+
+| Scenario | Latency |
+|----------|---------|
+| First local command (mDNS + handshake) | ~10s |
+| Subsequent commands (cached IP + session) | < 1s |
+| Cloud API (reference) | ~1.5s |
+
+### Enabling Cache
+
+```bash
+# Enable on current profile
+esp-rainmaker-cli cache enable
+
+# Or when creating a profile
+esp-rainmaker-cli profile add my-profile --base-url <url> --cache
+```
+
+For full cache documentation, see [Cache Management](cache.md).
 
 ## Finding Device Information
 
@@ -322,12 +393,46 @@ The signature is generated using the device's private key and can be verified by
 ## Best Practices
 
 1. **Use Security 1 or 2** with proper PoP for production devices
-2. **Cache PoP values** to avoid repeated lookups
-3. **Handle timeouts** gracefully with retry logic
-5. **Implement connection pooling** for multiple operations
-6. **Validate responses** before processing data
-7. **Use async interface** for better performance in applications
+2. **Enable cache** for repeated local control operations -- session reuse reduces latency from ~10s to < 1s
+3. **Use `--auto`** in scripts that must always succeed regardless of network conditions
+4. **Handle timeouts** gracefully with retry logic
+5. **Validate responses** before processing data
+6. **Use async interface** for better performance in applications
+7. **Clear cache after firmware updates** if device configuration changes (`esp-rainmaker-cli cache clear --nodeid <id>`)
+
+## Troubleshooting
+
+### Local control is slow
+
+- **Enable cache** to reuse sessions and skip mDNS: `esp-rainmaker-cli cache enable`
+- If cache is enabled but sessions aren't reusing, check with `--debug` for "Session resumed" messages
+
+### Stale session after device reboot
+
+The CLI detects this automatically and re-establishes a fresh session. If problems persist:
+
+```bash
+esp-rainmaker-cli cache clear --nodeid <nodeid>
+```
+
+### Device IP changed
+
+Cached sessions store the resolved IP. When the device gets a new IP, the 3-second connection timeout triggers an automatic mDNS re-resolution. To force this immediately:
+
+```bash
+esp-rainmaker-cli cache clear --nodeid <nodeid>
+```
+
+### `--auto` falls back to cloud unexpectedly
+
+Use `--debug` to see why local failed:
+
+```bash
+esp-rainmaker-cli getparams <nodeid> --auto --debug
+```
+
+Common causes: device not on same network, mDNS not reachable, device rebooted and session expired.
 
 ## Examples
 
-See the [node_management.md](node_management.md) and [parameters.md](parameters.md) documentation for more specific command examples and use cases.
+See the [node_management.md](node_management.md) and [parameters.md](parameters.md) documentation for more specific command examples and use cases. For cache management, see [Cache Management](cache.md).

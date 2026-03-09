@@ -95,6 +95,13 @@ The CLI supports the following main commands:
 * `claim` - Claim the node connected to a serial port (get cloud credentials)
 * `provision` - Provision the node to join Wi-Fi network
 
+### Cache Management
+
+* `cache enable` - Enable node cache on the current profile
+* `cache disable` - Disable node cache on the current profile
+* `cache show` - Show cached data (all nodes or a specific node with `--nodeid`)
+* `cache clear` - Clear cached data (all nodes or a specific node with `--nodeid`)
+
 ### Other Operations
 
 * `getmqtthost` - Get the MQTT Host URL to be used in the firmware
@@ -114,6 +121,7 @@ For detailed documentation on specific commands, refer to the following files:
 * [Provisioning](./commands/provisioning.md)
 * [Command Response](./commands/command_response.md)
 * [ESP Local Control](./commands/local_control.md)
+* [Cache Management](./commands/cache.md)
 * [Raw API](./commands/raw_api.md)
 
 ## Examples

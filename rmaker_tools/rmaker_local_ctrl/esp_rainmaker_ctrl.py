@@ -9,6 +9,7 @@ import json
 import sys
 import os
 from pathlib import Path
+from rmaker_lib.logger import log
 
 # Import from common shared modules
 try:
@@ -47,14 +48,14 @@ def get_security(secver, sec_patch_ver, username, password, pop='', verbose=Fals
         return Security0(verbose)
     return None
 
-async def get_transport(sel_transport, service_name):
+async def get_transport(sel_transport, service_name, timeout=60, resolve_timeout=15):
     try:
         if sel_transport == 'http':
             try:
                 from ..common.transport.transport_http import Transport_HTTP
             except ImportError:
                 from rmaker_tools.common.transport.transport_http import Transport_HTTP
-            return Transport_HTTP(service_name, None)
+            return Transport_HTTP(service_name, None, timeout=timeout, resolve_timeout=resolve_timeout)
         elif sel_transport == 'https':
             import ssl
             try:
@@ -64,7 +65,7 @@ async def get_transport(sel_transport, service_name):
             ssl_ctx = ssl.create_default_context()
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
-            return Transport_HTTP(service_name, ssl_ctx)
+            return Transport_HTTP(service_name, ssl_ctx, timeout=timeout, resolve_timeout=resolve_timeout)
         elif sel_transport == 'ble':
             try:
                 from ..common.transport.transport_ble import Transport_BLE
@@ -98,27 +99,65 @@ async def establish_session(tp, sec):
         on_except(e)
         return False
 
+PROP_INDEX_CONFIG = 0
+PROP_INDEX_PARAMS = 1
+
+
+async def get_property_by_index(tp, security_ctx, index, expected_name=None):
+    """
+    Read a single property by its known index. If expected_name is given,
+    verify the returned name matches; fall back to sequential scan on mismatch.
+    """
+    try:
+        log.debug(f"Reading property at index {index}" +
+                  (f" (expecting '{expected_name}')" if expected_name else ""))
+        message = proto_lc.get_prop_vals_request(security_ctx, [index])
+        response = tp.send_data('esp_local_ctrl/control', message)
+        props = proto_lc.get_prop_vals_response(security_ctx, response)
+
+        if props and len(props) > 0:
+            got_name = props[0].get('name', '')
+            log.debug(f"Property at index {index}: name='{got_name}'")
+            if expected_name is None or got_name == expected_name:
+                return props[0]
+            log.debug(f"Name mismatch at index {index}: expected '{expected_name}', "
+                      f"got '{got_name}'. Falling back to sequential scan.")
+        else:
+            log.debug(f"No property returned for index {index}, falling back to scan")
+
+        return await get_property_by_name(tp, security_ctx, expected_name or '')
+    except Exception as e:
+        on_except(e)
+        return None
+
+
 async def get_property_by_name(tp, security_ctx, prop_name):
     try:
         message = proto_lc.get_prop_count_request(security_ctx)
         response = tp.send_data('esp_local_ctrl/control', message)
         count = proto_lc.get_prop_count_response(security_ctx, response)
-        
+        log.debug(f"Property scan: count={count}, looking for '{prop_name}'")
+
         for i in range(count):
             message = proto_lc.get_prop_vals_request(security_ctx, [i])
             response = tp.send_data('esp_local_ctrl/control', message)
             props = proto_lc.get_prop_vals_response(security_ctx, response)
-            
-            if props and len(props) > 0 and props[0]['name'] == prop_name:
-                return props[0]
-        
+
+            if props and len(props) > 0:
+                got_name = props[0].get('name', '')
+                log.debug(f"  index {i}: name='{got_name}'")
+                if got_name == prop_name:
+                    return props[0]
+
+        log.debug(f"Property '{prop_name}' not found in {count} properties")
         return None
     except Exception as e:
         on_except(e)
         return None
 
+
 async def get_rainmaker_config(tp, security_ctx):
-    prop = await get_property_by_name(tp, security_ctx, "config")
+    prop = await get_property_by_index(tp, security_ctx, PROP_INDEX_CONFIG, "config")
     if prop and 'value' in prop:
         try:
             config_str = prop['value'].decode('utf-8') if isinstance(prop['value'], bytes) else prop['value']
@@ -128,8 +167,9 @@ async def get_rainmaker_config(tp, security_ctx):
             return None
     return None
 
+
 async def get_rainmaker_params(tp, security_ctx):
-    prop = await get_property_by_name(tp, security_ctx, "params")
+    prop = await get_property_by_index(tp, security_ctx, PROP_INDEX_PARAMS, "params")
     if prop and 'value' in prop:
         try:
             params_str = prop['value'].decode('utf-8') if isinstance(prop['value'], bytes) else prop['value']

@@ -3,6 +3,7 @@
 #
 import ipaddress
 import socket
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from http.client import HTTPConnection
 from http.client import HTTPSConnection
 
@@ -48,18 +49,38 @@ def parse_host_port(hostname: str) -> Tuple[str, int]:
     return host, port
 
 
+def _resolve_with_timeout(host, port, resolve_timeout=None):
+    """
+    Resolve hostname with an optional timeout.
+    socket.getaddrinfo has no timeout parameter, so we run it in a thread.
+    """
+    if resolve_timeout is None:
+        return socket.getaddrinfo(host, port)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(socket.getaddrinfo, host, port)
+        try:
+            return future.result(timeout=resolve_timeout)
+        except FuturesTimeoutError:
+            raise socket.gaierror(f'Resolution timed out after {resolve_timeout}s')
+
+
 class Transport_HTTP(Transport):
-    def __init__(self, hostname, ssl_context=None):
+    def __init__(self, hostname, ssl_context=None, timeout=60, resolve_timeout=None):
         host, port = parse_host_port(hostname)
         try:
-            socket.getaddrinfo(host, None)
+            addrs = _resolve_with_timeout(host, port, resolve_timeout)
+            self._resolved_ip = addrs[0][4][0]
         except socket.gaierror:
             raise RuntimeError(f'Unable to resolve hostname: {host}')
 
+        self._host = host
+        self._port = port
+        self._ssl_context = ssl_context
+
         if ssl_context is None:
-            self.conn = HTTPConnection(host, port, timeout=60)
+            self.conn = HTTPConnection(self._resolved_ip, port, timeout=timeout)
         else:
-            self.conn = HTTPSConnection(host, port, context=ssl_context, timeout=60)
+            self.conn = HTTPSConnection(self._resolved_ip, port, context=ssl_context, timeout=timeout)
         try:
             print(f'++++ Connecting to {hostname}++++')
             self.conn.connect()
@@ -87,3 +108,16 @@ class Transport_HTTP(Transport):
 
     def send_data(self, ep_name, data):
         return self._send_post_request('/' + ep_name, data)
+
+    def get_cookie(self):
+        return self.headers.get('Cookie')
+
+    def set_cookie(self, cookie):
+        if cookie:
+            self.headers['Cookie'] = cookie
+
+    def get_host_port(self):
+        return self._host, self._port
+
+    def get_resolved_host_port(self):
+        return self._resolved_ip, self._port
