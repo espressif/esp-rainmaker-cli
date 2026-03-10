@@ -426,7 +426,7 @@ class Config:
         socket.setdefaulttimeout(10)
         log.info("Checking for supported version.")
         path = 'apiversions'
-        request_url = self.get_host().split(serverconfig.VERSION)[0] + path
+        request_url = self.get_host().rsplit(serverconfig.VERSION, 1)[0] + path
         try:
             log.debug("Version check request url : " + request_url)
             response = requests.get(url=request_url, verify=CERT_FILE,
