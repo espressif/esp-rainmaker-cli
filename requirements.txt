@@ -14,3 +14,7 @@ setuptools
 esp_idf_nvs_partition_gen>=0.1.6
 bleak>=0.20.0
 zeroconf>=0.131.0
+# Optional: Video streaming dependencies (install separately due to cryptography version conflicts)
+# pip install aiortc boto3 websockets opencv-python numpy
+boto3>=1.28.0
+websockets>=11.0

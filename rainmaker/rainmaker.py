@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# SPDX-FileCopyrightText: 2020-2025 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2020-2026 Espressif Systems (Shanghai) CO LTD
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -17,6 +17,7 @@ from rmaker_cmd.test import test
 from rmaker_lib.logger import log
 from rmaker_cmd.group import group_add, group_remove, group_edit, group_list, group_show, group_add_nodes, group_remove_nodes, group_list_nodes
 from rmaker_cmd.cache import cache_manage
+from rmaker_cmd.stream import stream_video
 
 # Import the version
 from rainmaker.version import VERSION
@@ -1017,6 +1018,31 @@ def main():
                                help='Path to file containing request body (JSON)')
     add_profile_argument(raw_api_parser)
     raw_api_parser.set_defaults(func=raw_api_call)
+
+    # Video Streaming
+    stream_parser = subparsers.add_parser('stream',
+                                          help='Stream video from a camera device')
+    stream_parser.add_argument('nodeid',
+                               type=str,
+                               metavar='<nodeid>',
+                               help='Node ID for the camera device')
+    stream_parser.add_argument('--output', '-o',
+                               type=str,
+                               metavar='<path>',
+                               help='Save video to file (MP4)')
+    stream_parser.add_argument('--region',
+                               type=str,
+                               metavar='<region>',
+                               help='AWS region override')
+    stream_parser.add_argument('--duration',
+                               type=int,
+                               metavar='<seconds>',
+                               help='Stream duration in seconds')
+    stream_parser.add_argument('--stats-only',
+                               action='store_true',
+                               help='Show statistics only, no video display')
+    add_profile_argument(stream_parser)
+    stream_parser.set_defaults(func=stream_video)
 
     args = parser.parse_args()
 
