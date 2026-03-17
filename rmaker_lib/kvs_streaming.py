@@ -588,31 +588,48 @@ class KVSStreamingClient:
             log.info(f"WSS endpoint: {wss_endpoint}")
             log.info(f"HTTPS endpoint: {https_endpoint}")
 
-            # Prepare ICE servers (following Python SDK reference)
-            # Generate client ID first (needed for ICE server config)
+            # Generate client ID (needed for both ICE server config and WebSocket URL)
             client_id = str(uuid.uuid4())
 
-            # Create kinesis-video-signaling client for ICE server config
-            kvs_signaling_client = boto3.client(
-                'kinesis-video-signaling',
-                endpoint_url=https_endpoint,
-                region_name=self.credentials.region,
-                aws_access_key_id=self.credentials.access_key_id,
-                aws_secret_access_key=self.credentials.secret_access_key,
-                aws_session_token=self.credentials.session_token
-            )
+            # Prepare signed WebSocket URL now (CPU-only, fast) so we can start
+            # the WebSocket connection concurrently with the ICE server fetch
+            if not WEBSOCKETS_AVAILABLE:
+                raise ImportError("websockets is required for WebSocket signaling. Install with: pip install websockets")
+            signed_wss_url, _ = self._create_wss_url(wss_endpoint, actual_channel_arn, client_id)
 
-            # Get ICE server configuration
-            ice_server_config = kvs_signaling_client.get_ice_server_config(
-                ChannelARN=actual_channel_arn,
-                ClientId=client_id
-            )
+            # Launch ICE server fetch and WebSocket connection in parallel
+            # ICE config uses https_endpoint, WebSocket uses wss_endpoint — fully independent
+            async def _fetch_ice_servers():
+                def _sync_fetch():
+                    signaling_client = boto3.client(
+                        'kinesis-video-signaling',
+                        endpoint_url=https_endpoint,
+                        region_name=self.credentials.region,
+                        aws_access_key_id=self.credentials.access_key_id,
+                        aws_secret_access_key=self.credentials.secret_access_key,
+                        aws_session_token=self.credentials.session_token
+                    )
+                    return signaling_client.get_ice_server_config(
+                        ChannelARN=actual_channel_arn,
+                        ClientId=client_id
+                    )
+                return await asyncio.to_thread(_sync_fetch)
 
-            # Build ICE servers list (following Python SDK reference)
+            ice_task = asyncio.create_task(_fetch_ice_servers())
+            ws_task = asyncio.create_task(websockets.connect(signed_wss_url))
+            log.info(f"Fetching ICE servers and connecting WebSocket in parallel (client_id: {client_id})...")
+
+            # Await ICE servers first (needed to create peer connection before signaling)
+            try:
+                ice_server_config = await ice_task
+            except Exception:
+                ws_task.cancel()
+                raise
+
+            # Build ICE servers list
             ice_servers = [RTCIceServer(urls=f'stun:stun.kinesisvideo.{self.credentials.region}.amazonaws.com:443')]
             log.debug(f"Added STUN server: stun:stun.kinesisvideo.{self.credentials.region}.amazonaws.com:443")
             log.info(f"STUN server configured: stun:stun.kinesisvideo.{self.credentials.region}.amazonaws.com:443")
-            log.info("STUN binding requests will be sent automatically by aiortc's ICE stack during connectivity checks")
 
             for ice_server in ice_server_config['IceServerList']:
                 ice_servers.append(RTCIceServer(
@@ -622,11 +639,8 @@ class KVSStreamingClient:
                 ))
                 log.debug(f"Added TURN server: {ice_server['Uris']}")
                 log.info(f"TURN server configured: {ice_server['Uris']}")
-                log.info("TURN allocation requests will be sent automatically by aiortc's ICE stack if needed")
 
             log.info(f"Prepared {len(ice_servers)} ICE servers (1 STUN + {len(ice_servers)-1} TURN)")
-            log.info("STUN/TURN binding requests/responses are handled automatically by aiortc's ICE implementation")
-            log.info("To see detailed STUN/TURN logs, enable DEBUG logging: logging.getLogger('aioice').setLevel(logging.DEBUG)")
 
             # Verify at least one ICE server is configured
             if len(ice_servers) == 0:
@@ -948,19 +962,11 @@ class KVSStreamingClient:
                 elif track.kind == "audio":
                     log.info("Received audio track (not processing)")
 
-            # Connect to KVS signaling via WebSocket with sigv4 signing
-            # Following Python SDK reference implementation
-            if not WEBSOCKETS_AVAILABLE:
-                raise ImportError("websockets is required for WebSocket signaling. Install with: pip install websockets")
+            # Await WebSocket connection (started in parallel with ICE fetch above)
+            websocket = await ws_task
+            log.info("WebSocket connected")
 
-            # Generate sigv4 signed WebSocket URL using SigV4QueryAuth (matches Python SDK)
-            # Note: client_id was already generated above for ICE server config
-            signed_wss_url, _ = self._create_wss_url(wss_endpoint, actual_channel_arn, client_id)
-            log.info(f"Connecting to WebSocket (client_id: {client_id})...")
-
-            # Establish WebSocket connection using websockets library (matches Python SDK)
-            async with websockets.connect(signed_wss_url) as websocket:
-                log.info("WebSocket connected, setting up trickle ICE...")
+            try:
 
                 # Store websocket reference for ICE candidate handler
                 websocket_ref['socket'] = websocket
@@ -2050,6 +2056,9 @@ class KVSStreamingClient:
                     log.info("Connection established successfully!")
                 else:
                     log.info("Connection not fully established yet - will continue monitoring in run() method")
+
+            finally:
+                await websocket.close()
 
             log.info("Connected to KVS stream")
 
