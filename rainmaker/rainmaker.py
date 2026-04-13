@@ -16,6 +16,7 @@ from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
 from rmaker_cmd.group import group_add, group_remove, group_edit, group_list, group_show, group_add_nodes, group_remove_nodes, group_list_nodes
+from rmaker_cmd.automation import automation_add, automation_edit, automation_remove, automation_get
 from rmaker_cmd.cache import cache_manage
 
 # Import the version
@@ -908,6 +909,76 @@ def main():
     group_list_nodes_parser.add_argument('--raw', action='store_true', help='Print raw JSON output (only with --node-details)')
     add_profile_argument(group_list_nodes_parser)
     group_list_nodes_parser.set_defaults(func=group_list_nodes)
+
+    # Automation Management
+    automation_parser = subparsers.add_parser('automations',
+                                              help='Manage automation triggers')
+    automation_parser.set_defaults(func=lambda vars=None: automation_parser.print_help())
+    automation_subparsers = automation_parser.add_subparsers(dest='automation_command',
+                                                             help='Automation operations')
+
+    # automations add
+    auto_add_parser = automation_subparsers.add_parser('add', help='Create a new automation trigger')
+    auto_add_parser.add_argument('--name', type=str, required=True, help='Name of the automation')
+    auto_add_parser.add_argument('--event-type', type=str, required=True,
+                                 choices=['params', 'weather', 'daylight'],
+                                 help='Event type (params, weather, daylight)')
+    auto_add_parser.add_argument('--event', type=str, required=True, action='append',
+                                 help='Event JSON object (repeatable). '
+                                      'E.g., \'{"params": {"Light": {"Brightness": 100}}, "check": "=="}\'')
+    auto_add_parser.add_argument('--action', type=str, required=True,
+                                 help='Action JSON (object or array of objects). '
+                                      'E.g., \'{"node_id": "xxx", "params": {"Light": {"Output": true}}}\'')
+    auto_add_parser.add_argument('--node-id', type=str,
+                                 help='Node ID (required for event-type params)')
+    auto_add_parser.add_argument('--location', type=str,
+                                 help='Location as lat,long (required for event-type weather/daylight). '
+                                      'E.g., 18.521428,73.8544541')
+    auto_add_parser.add_argument('--event-operator', type=str, choices=['AND', 'OR'],
+                                 help='Logical operator for multiple events (AND/OR)')
+    auto_add_parser.add_argument('--retrigger', action='store_true', default=False,
+                                 help='Allow retriggering for the same event')
+    auto_add_parser.add_argument('--metadata', type=str, help='Metadata as JSON string')
+    add_profile_argument(auto_add_parser)
+    auto_add_parser.set_defaults(func=automation_add)
+
+    # automations edit
+    auto_edit_parser = automation_subparsers.add_parser('edit', help='Edit an existing automation trigger')
+    auto_edit_parser.add_argument('--id', type=str, required=True, help='Automation ID')
+    auto_edit_parser.add_argument('--name', type=str, help='New name for the automation')
+    auto_edit_parser.add_argument('--event', type=str, action='append',
+                                  help='Event JSON object (repeatable)')
+    auto_edit_parser.add_argument('--action', type=str,
+                                  help='Action JSON (object or array of objects)')
+    auto_edit_parser.add_argument('--node-id', type=str, help='Node ID')
+    auto_edit_parser.add_argument('--location', type=str,
+                                  help='Location as lat,long')
+    auto_edit_parser.add_argument('--event-operator', type=str, choices=['AND', 'OR'],
+                                  help='Logical operator for multiple events (AND/OR)')
+    auto_edit_parser.add_argument('--retrigger', action='store_true', default=False,
+                                  help='Enable retriggering')
+    auto_edit_parser.add_argument('--no-retrigger', action='store_true', default=False,
+                                  help='Disable retriggering')
+    auto_edit_parser.add_argument('--enabled', action='store_true', default=False,
+                                  help='Enable the automation')
+    auto_edit_parser.add_argument('--disabled', action='store_true', default=False,
+                                  help='Disable the automation')
+    auto_edit_parser.add_argument('--metadata', type=str, help='Metadata as JSON string')
+    add_profile_argument(auto_edit_parser)
+    auto_edit_parser.set_defaults(func=automation_edit)
+
+    # automations remove
+    auto_remove_parser = automation_subparsers.add_parser('remove', help='Remove an automation trigger')
+    auto_remove_parser.add_argument('--id', type=str, required=True, help='Automation ID to remove')
+    add_profile_argument(auto_remove_parser)
+    auto_remove_parser.set_defaults(func=automation_remove)
+
+    # automations get
+    auto_get_parser = automation_subparsers.add_parser('get', help='Get automation triggers')
+    auto_get_parser.add_argument('--id', type=str, help='Automation ID (omit to list all)')
+    auto_get_parser.add_argument('--node-id', type=str, help='Filter by node ID')
+    add_profile_argument(auto_get_parser)
+    auto_get_parser.set_defaults(func=automation_get)
 
     # Node Management (tags, metadata)
     node_parser = subparsers.add_parser('node',

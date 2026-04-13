@@ -599,6 +599,85 @@ class Session:
             log.error(f'Failed to list nodes in group: {e}')
             raise
 
+    # Automation Trigger API methods
+
+    def create_automation(self, payload):
+        """Create a new automation trigger."""
+        path = 'user/node_automation'
+        url = self.config.get_host() + path
+        log.debug(f"Create automation request url : {url}")
+        log.debug(f"Create automation request payload : {json.dumps(payload)}")
+        log.debug(f"Create automation request header : {self.request_header}")
+        try:
+            response = requests.post(url=url, headers=self.request_header, json=payload, verify=configmanager.CERT_FILE)
+            log.debug(f"Create automation response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to create automation: {e}')
+            raise
+
+    def update_automation(self, automation_id, payload):
+        """Update an existing automation trigger."""
+        path = f'user/node_automation?automation_id={automation_id}'
+        url = self.config.get_host() + path
+        log.debug(f"Update automation request url : {url}")
+        log.debug(f"Update automation request payload : {json.dumps(payload)}")
+        log.debug(f"Update automation request header : {self.request_header}")
+        try:
+            response = requests.put(url=url, headers=self.request_header, json=payload, verify=configmanager.CERT_FILE)
+            log.debug(f"Update automation response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to update automation: {e}')
+            raise
+
+    def get_automations(self, automation_id=None, node_id=None):
+        """Get automation triggers. Handles pagination."""
+        path = 'user/node_automation'
+        params = {}
+        if automation_id:
+            params['automation_id'] = automation_id
+        if node_id:
+            params['node_id'] = node_id
+        url = self.config.get_host() + path
+        log.debug(f"Get automations request url : {url}")
+        log.debug(f"Get automations request params : {params}")
+        log.debug(f"Get automations request header : {self.request_header}")
+        try:
+            all_automations = []
+            while True:
+                response = requests.get(url=url, headers=self.request_header, params=params, verify=configmanager.CERT_FILE)
+                log.debug(f"Get automations response : {response.text}")
+                response.raise_for_status()
+                data = response.json()
+                if 'automation_trigger_actions' in data:
+                    all_automations.extend(data['automation_trigger_actions'])
+                if 'next_id' in data and data['next_id']:
+                    params['start_id'] = data['next_id']
+                else:
+                    break
+            return {'automation_trigger_actions': all_automations}
+        except Exception as e:
+            log.error(f'Failed to get automations: {e}')
+            raise
+
+    def remove_automation(self, automation_id):
+        """Remove an automation trigger."""
+        path = f'user/node_automation?automation_id={automation_id}'
+        url = self.config.get_host() + path
+        log.debug(f"Remove automation request url : {url}")
+        log.debug(f"Remove automation request header : {self.request_header}")
+        try:
+            response = requests.delete(url=url, headers=self.request_header, verify=configmanager.CERT_FILE)
+            log.debug(f"Remove automation response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to remove automation: {e}')
+            raise
+
     def delete_user(self, request=False, verification_code=None):
         """
         Delete current user account from ESP RainMaker.
