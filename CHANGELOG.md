@@ -2,6 +2,15 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.13.0] - 08-Apr-2026
+### Added
+- New `stream` command for WebRTC video streaming from ESP RainMaker camera devices via Amazon Kinesis Video Streams (KVS) signaling:
+  - Live video display with optional recording to file (`--output` / `-o`)
+  - Duration-limited streaming (`--duration`)
+  - Parallel ICE server fetch and WebSocket connection for faster stream setup
+  - Graceful handling of device disconnects, reboots, and frame timeouts
+  - Suppression of macOS FFmpeg duplicate library warnings during import
+
 ## [1.12.0] - 19-Feb-2026
 ### Added
 - Local node cache layer for faster `--local` control operations:

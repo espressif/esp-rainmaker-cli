@@ -1,9 +1,9 @@
-image: python:3.9
-
 stages:
   - validate
+  - build
 
 validate_release_info:
+  image: python:3.9
   stage: validate
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"  # Run on MRs
@@ -41,6 +41,28 @@ validate_release_info:
         exit 1
       fi
 
-    # Build package to validate setup.py and structure
-    - python -m build --sdist --wheel .
     - echo "✅ All validation checks passed!"
+
+build_and_test_wheel:
+  stage: build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "master"
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+  image: python:${PYTHON_VERSION}
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends libavformat-dev libavcodec-dev libavdevice-dev libavutil-dev libavfilter-dev libswscale-dev libswresample-dev pkg-config
+    - pip install --upgrade pip setuptools build wheel
+    - python -m build --sdist --wheel .
+    - pip install dist/*.whl
+    - EXPECTED_VERSION=$(python -c "import re; print(re.search(r'VERSION = \"(.*)\"', open('rainmaker/version.py').read()).group(1))")
+    - CLI_OUTPUT=$(esp-rainmaker-cli version)
+    - echo "$CLI_OUTPUT"
+    - |
+      if [ "$CLI_OUTPUT" != "ESP RainMaker CLI v${EXPECTED_VERSION}" ]; then
+        echo "Error: CLI version mismatch - expected 'ESP RainMaker CLI v${EXPECTED_VERSION}' but got '${CLI_OUTPUT}'"
+        exit 1
+      fi
+    - echo "✅ Build and install succeeded on Python ${PYTHON_VERSION}"

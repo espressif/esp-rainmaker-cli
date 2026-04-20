@@ -102,6 +102,10 @@ The CLI supports the following main commands:
 * `cache show` - Show cached data (all nodes or a specific node with `--nodeid`)
 * `cache clear` - Clear cached data (all nodes or a specific node with `--nodeid`)
 
+### Video Streaming
+
+* `stream <nodeid>` - Stream video from a camera device via WebRTC (KVS signaling)
+
 ### Other Operations
 
 * `getmqtthost` - Get the MQTT Host URL to be used in the firmware
@@ -122,6 +126,7 @@ For detailed documentation on specific commands, refer to the following files:
 * [Command Response](./commands/command_response.md)
 * [ESP Local Control](./commands/local_control.md)
 * [Cache Management](./commands/cache.md)
+* [Video Streaming](./commands/video_streaming.md)
 * [Raw API](./commands/raw_api.md)
 
 ## Examples

@@ -9,8 +9,13 @@ future>=0.15.2
 pyparsing>=2.4.0
 pyelftools>=0.22
 esptool>=4.4
-esp-secure-cert-tool==1.0.1
+esp-secure-cert-tool>=2.3.6
 setuptools
 esp_idf_nvs_partition_gen>=0.1.6
 bleak>=0.20.0
 zeroconf>=0.131.0
+aiortc>=1.6.0
+boto3>=1.28.0
+websockets>=11.0
+opencv-python>=4.8.0
+numpy>=1.24.0
