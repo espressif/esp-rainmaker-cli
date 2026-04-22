@@ -85,6 +85,26 @@ The CLI supports the following main commands:
 * `sharing list_nodes` - List nodes sharing details
 * `sharing list_requests` - List pending requests
 
+> Node-level `sharing` is deprecated; prefer `group sharing` (see Group Management) — even for a single node, create a group and share it.
+
+### Group Management
+
+* `group add` - Create a new group
+* `group remove` - Delete a group
+* `group edit` - Edit group properties
+* `group list` - List all groups (optionally with hierarchy)
+* `group show` - Show group details
+* `group add-nodes` - Add nodes to a group
+* `group remove-nodes` - Remove nodes from a group
+* `group list-nodes` - List nodes in a group
+* `group sharing add` - Share group(s) / matter fabric(s) with a user
+* `group sharing remove` - Remove group sharing with a user
+* `group sharing list` - List sharing details for groups
+* `group sharing list-requests` - List pending group sharing requests
+* `group sharing accept` - Accept a group sharing request
+* `group sharing decline` - Decline a group sharing request
+* `group sharing cancel` - Cancel a pending group sharing request
+
 ### Command Response (Beta)
 
 * `create_cmd_request` - Create a command response request for nodes
@@ -118,6 +138,7 @@ For detailed documentation on specific commands, refer to the following files:
 * [Profile Management](./commands/profile_management.md)
 * [Schedule Management](./commands/scheduling.md)
 * [Node Sharing](./commands/node_sharing.md)
+* [Group Management](./commands/group_management.md)
 * [Parameter Management](./commands/parameters.md)
 * [Node Management](./commands/node_management.md)
 * [Node Tags and Metadata](./commands/node_tags_metadata.md)

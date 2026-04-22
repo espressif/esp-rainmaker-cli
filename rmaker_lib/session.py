@@ -599,6 +599,154 @@ class Session:
             log.error(f'Failed to list nodes in group: {e}')
             raise
 
+    # Group Sharing API methods
+
+    def add_user_group_sharing(self, groups, user_name=None, primary=None,
+                               sub_role=None, metadata=None, transfer=None,
+                               new_role=None):
+        """Share one or more groups/matter fabrics with another user."""
+        path = 'user/node_group/sharing'
+        payload = {'groups': groups}
+        if user_name:
+            payload['user_name'] = user_name
+        if primary is not None:
+            payload['primary'] = primary
+        if sub_role is not None:
+            payload['sub_role'] = sub_role
+        if metadata is not None:
+            payload['metadata'] = metadata
+        if transfer is not None:
+            payload['transfer'] = transfer
+        if new_role:
+            payload['new_role'] = new_role
+        url = self.config.get_host() + path
+        log.debug(f"Add group sharing request url : {url}")
+        log.debug(f"Add group sharing request payload : {json.dumps(payload)}")
+        try:
+            response = requests.put(url=url, headers=self.request_header,
+                                    json=payload, verify=configmanager.CERT_FILE)
+            log.debug(f"Add group sharing response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to add group sharing: {e}')
+            raise
+
+    def remove_user_group_sharing(self, groups, user_name):
+        """Remove sharing of one or more groups/matter fabrics with a user."""
+        path = 'user/node_group/sharing'
+        params = {'groups': groups, 'user_name': user_name}
+        url = self.config.get_host() + path
+        log.debug(f"Remove group sharing request url : {url}")
+        log.debug(f"Remove group sharing request params : {params}")
+        try:
+            response = requests.delete(url=url, headers=self.request_header,
+                                       params=params, verify=configmanager.CERT_FILE)
+            log.debug(f"Remove group sharing response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to remove group sharing: {e}')
+            raise
+
+    def get_user_group_sharing(self, group_id=None, sub_groups=False,
+                               parent_groups=False, metadata=False):
+        """Fetch group/fabric sharing details for the current user."""
+        path = 'user/node_group/sharing'
+        params = {}
+        if group_id:
+            params['group_id'] = group_id
+        if sub_groups:
+            params['sub_groups'] = 'true'
+        if parent_groups:
+            params['parent_groups'] = 'true'
+        if metadata:
+            params['metadata'] = 'true'
+        url = self.config.get_host() + path
+        log.debug(f"Get group sharing request url : {url}")
+        log.debug(f"Get group sharing request params : {params}")
+        try:
+            response = requests.get(url=url, headers=self.request_header,
+                                    params=params, verify=configmanager.CERT_FILE)
+            log.debug(f"Get group sharing response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to get group sharing: {e}')
+            raise
+
+    def get_user_group_sharing_requests(self, request_id=None, primary_user=None):
+        """Fetch pending group sharing requests (sent or received).
+
+        Pagination is handled internally: the server returns at most 10
+        records per call along with `next_request_id`/`next_user_name`
+        cursors, which are echoed back until the server stops returning
+        them. The consolidated list is returned to the caller.
+        """
+        path = 'user/node_group/sharing/requests'
+        params = {}
+        if request_id:
+            params['request_id'] = request_id
+        if primary_user is not None:
+            params['primary_user'] = 'true' if primary_user else 'false'
+        url = self.config.get_host() + path
+
+        all_requests = []
+        try:
+            while True:
+                log.debug(f"Get group sharing requests url : {url}")
+                log.debug(f"Get group sharing requests params : {params}")
+                response = requests.get(url=url, headers=self.request_header,
+                                        params=params, verify=configmanager.CERT_FILE)
+                log.debug(f"Get group sharing requests response : {response.text}")
+                response.raise_for_status()
+                data = response.json()
+                all_requests.extend(data.get('sharing_requests', []))
+                next_req = data.get('next_request_id')
+                if not next_req:
+                    break
+                params['start_request_id'] = next_req
+                next_user = data.get('next_user_name')
+                if next_user:
+                    params['start_user_name'] = next_user
+            return {'sharing_requests': all_requests, 'total': len(all_requests)}
+        except Exception as e:
+            log.error(f'Failed to get group sharing requests: {e}')
+            raise
+
+    def remove_user_group_sharing_request(self, request_id):
+        """Cancel a pending group sharing request (primary side)."""
+        path = 'user/node_group/sharing/requests'
+        params = {'request_id': request_id}
+        url = self.config.get_host() + path
+        log.debug(f"Cancel group sharing request url : {url}")
+        try:
+            response = requests.delete(url=url, headers=self.request_header,
+                                       params=params, verify=configmanager.CERT_FILE)
+            log.debug(f"Cancel group sharing request response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to cancel group sharing request: {e}')
+            raise
+
+    def respond_user_group_sharing_request(self, request_id, accept):
+        """Accept or decline a group sharing request."""
+        path = 'user/node_group/sharing/requests'
+        payload = {'accept': accept, 'request_id': request_id}
+        url = self.config.get_host() + path
+        log.debug(f"Respond group sharing request url : {url}")
+        log.debug(f"Respond group sharing request payload : {json.dumps(payload)}")
+        try:
+            response = requests.put(url=url, headers=self.request_header,
+                                    json=payload, verify=configmanager.CERT_FILE)
+            log.debug(f"Respond group sharing response : {response.text}")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            log.error(f'Failed to respond to group sharing request: {e}')
+            raise
+
     # Automation Trigger API methods
 
     def create_automation(self, payload):

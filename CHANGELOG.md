@@ -2,6 +2,13 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.14.0] - 24-Apr-2026
+### Added
+- New `group sharing` subcommand for sharing device groups / Matter fabrics between users:
+  - `add`, `remove`, `list`, `list-requests`, `accept`, `decline`, `cancel` operations
+  - Supports primary/secondary roles, sub-roles (1-4), metadata, and ownership transfer (`--transfer`, `--new-role`)
+  - Parsed, human-readable output by default; pass `--raw` on any operation to get the underlying JSON response
+
 ## [1.13.1] - 23-Apr-2026
 ### Added
 - Node sharing enhancements:
