@@ -668,6 +668,29 @@ def main():
                                "format: <nodeid1>,<nodeid2>,...",
                                required=True)
 
+    add_op_parser.add_argument('--sub_role',
+                               type=int,
+                               metavar='<sub_role>',
+                               choices=range(1, 5),
+                               help='Sub-role for the secondary user (1-4)',
+                               default=None)
+
+    add_op_parser.add_argument('--primary',
+                               action='store_true',
+                               help='Set "primary":true in the sharing request')
+
+    add_op_parser.add_argument('--transfer',
+                               action='store_true',
+                               help='Transfer node ownership to the specified user')
+
+    add_op_parser.add_argument('--new_role',
+                               type=str,
+                               metavar='<new_role>',
+                               choices=['primary', 'secondary'],
+                               help='New role for the current user after transfer (primary/secondary).\n'
+                               'Only used with --transfer',
+                               default=None)
+
     add_profile_argument(add_op_parser)
     add_op_parser.set_defaults(func=node_sharing_ops, parser=add_op_parser)
 

@@ -34,12 +34,40 @@ esp-rainmaker-cli sharing <operation> [options]
 As a primary user, you can share your nodes with another user:
 
 ```bash
-esp-rainmaker-cli sharing add_user --user <email> --nodes <nodeid1>,<nodeid2>,...
+esp-rainmaker-cli sharing add_user --user <email> --nodes <nodeid1>,<nodeid2>,... [--sub_role <1-4>] [--primary] [--transfer [--new_role <primary|secondary>]]
 ```
 
-Example:
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--user` | (Required) Email of the user to share with |
+| `--nodes` | (Required) Comma-separated node IDs |
+| `--sub_role` | (Optional) Sub-role for the user (integer, 1-4) |
+| `--primary` | (Optional) Set `"primary":true` in the sharing request |
+| `--transfer` | (Optional) Transfer node ownership to the specified user |
+| `--new_role` | (Optional) New role for the current user after transfer (`primary` or `secondary`). Only used with `--transfer` |
+
+**Examples:**
+
+Basic sharing:
 ```bash
 esp-rainmaker-cli sharing add_user --user secondary@example.com --nodes abcd1234,efgh5678
+```
+
+Sharing with a specific sub-role:
+```bash
+esp-rainmaker-cli sharing add_user --user secondary@example.com --nodes abcd1234 --sub_role 3
+```
+
+Sharing with primary flag:
+```bash
+esp-rainmaker-cli sharing add_user --user secondary@example.com --nodes abcd1234 --primary
+```
+
+Transferring ownership:
+```bash
+esp-rainmaker-cli sharing add_user --user newowner@example.com --nodes abcd1234 --transfer --new_role secondary
 ```
 
 This sends a sharing request to the specified user's email. The request will expire in 7 days if not accepted.

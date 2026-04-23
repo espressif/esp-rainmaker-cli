@@ -2,6 +2,13 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.13.1] - 23-Apr-2026
+### Added
+- Node sharing enhancements:
+  - Support for sharing as "primary"
+  - Transferring nodes
+  - Adding sub-roles
+
 ## [1.13.0] - 08-Apr-2026
 ### Added
 - New `stream` command for WebRTC video streaming from ESP RainMaker camera devices via Amazon Kinesis Video Streams (KVS) signaling:
