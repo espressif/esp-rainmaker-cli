@@ -897,7 +897,7 @@ def list_sharing_details(node_id=None, primary_user=False, request_id=None, list
 
     return node_json_resp
 
-def add_user_to_share_nodes(nodes=None, user=None, profile_override=None):
+def add_user_to_share_nodes(nodes=None, user=None, sub_role=None, primary=False, transfer=False, new_role=None, profile_override=None):
     """
     Add user to share nodes
 
@@ -932,6 +932,14 @@ def add_user_to_share_nodes(nodes=None, user=None, profile_override=None):
     api_input = {}
     api_input['nodes'] = node_id_list
     api_input['user_name'] = user
+    if sub_role is not None:
+        api_input['sub_role'] = sub_role
+    if primary:
+        api_input['primary'] = True
+    if transfer:
+        api_input['transfer'] = True
+        if new_role is not None:
+            api_input['new_role'] = new_role
     log.debug("API data set: {}".format(api_input))
 
     # API with profile-aware session
@@ -1116,7 +1124,7 @@ def node_sharing_ops(vars=None):
         if action == 'add_user':
             # Share nodes with user
             print("Adding user to share node(s)")
-            node_json_resp = add_user_to_share_nodes(nodes=vars['nodes'], user=vars['user'], profile_override=profile_override)
+            node_json_resp = add_user_to_share_nodes(nodes=vars['nodes'], user=vars['user'], sub_role=vars.get('sub_role'), primary=vars.get('primary', False), transfer=vars.get('transfer', False), new_role=vars.get('new_role'), profile_override=profile_override)
 
             # Print success response
             if 'status' in node_json_resp and node_json_resp['status'].lower() == 'success':
