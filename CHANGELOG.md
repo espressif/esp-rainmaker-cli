@@ -2,6 +2,10 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [Unreleased]
+### Added
+- `--ble_adapter` option for the `provision` command to select the HCI adapter used for BLE transport (default: `hci0`). Useful with `vhci_bridge` for emulated devices, e.g. `--ble_adapter hci1`. Linux/BlueZ only.
+
 ## [1.14.1] - 05-Jun-2026
 ### Bugfixes
 - Security 2 fixes across provisioning and local control:

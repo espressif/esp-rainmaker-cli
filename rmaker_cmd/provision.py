@@ -244,7 +244,8 @@ def provision(vars=None):
                 no_wifi=no_wifi,
                 disable_chal_resp=disable_chal_resp,
                 tags=mapping_tags,
-                metadata=mapping_metadata
+                metadata=mapping_metadata,
+                ble_adapter=vars.get('ble_adapter', 'hci0')
             )
         except RuntimeError as claim_err:
             # Handle claim requirement error specifically

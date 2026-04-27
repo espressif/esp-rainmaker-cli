@@ -164,7 +164,7 @@ def get_wifi_creds_from_scanlist(transport_mode, obj_transport,
 def provision_device(transport_mode, pop, userid, secretkey,
                      ssid=None, passphrase=None, security_version=None,
                      sec2_username='', sec2_password='', device_name=None, session=None, no_retry=False, no_wifi=False, disable_chal_resp=False,
-                     tags=None, metadata=None):
+                     tags=None, metadata=None, ble_adapter=esp_prov.transport.DEFAULT_BLE_ADAPTER):
     """
     Wi-Fi Provision a device
 
@@ -235,7 +235,7 @@ def provision_device(transport_mode, pop, userid, secretkey,
     else:
         service_name = None  # Use default for SoftAP (192.168.4.1:80)
 
-    obj_transport = esp_prov.get_transport(transport_mode, service_name)
+    obj_transport = esp_prov.get_transport(transport_mode, service_name, ble_adapter)
     if obj_transport is None:
         print("Establishing connection to node - Failed")
         return None
