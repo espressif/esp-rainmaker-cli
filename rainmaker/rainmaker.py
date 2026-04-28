@@ -15,7 +15,12 @@ from rmaker_cmd.cmd_response import get_cmd_requests, create_cmd_request
 from rmaker_cmd.provision import provision
 from rmaker_cmd.test import test
 from rmaker_lib.logger import log
-from rmaker_cmd.group import group_add, group_remove, group_edit, group_list, group_show, group_add_nodes, group_remove_nodes, group_list_nodes
+from rmaker_cmd.group import (group_add, group_remove, group_edit, group_list,
+                              group_show, group_add_nodes, group_remove_nodes,
+                              group_list_nodes, group_sharing_add,
+                              group_sharing_remove, group_sharing_list,
+                              group_sharing_list_requests, group_sharing_accept,
+                              group_sharing_decline, group_sharing_cancel)
 from rmaker_cmd.automation import automation_add, automation_edit, automation_remove, automation_get
 from rmaker_cmd.cache import cache_manage
 from rmaker_cmd.stream import stream_video
@@ -933,6 +938,127 @@ def main():
     group_list_nodes_parser.add_argument('--raw', action='store_true', help='Print raw JSON output (only with --node-details)')
     add_profile_argument(group_list_nodes_parser)
     group_list_nodes_parser.set_defaults(func=group_list_nodes)
+
+    # group sharing
+    group_sharing_parser = group_subparsers.add_parser(
+        'sharing',
+        help='Share groups / matter fabrics between users',
+        formatter_class=argparse.RawTextHelpFormatter,
+        description='Share groups or matter fabrics with other users.\n'
+                    'Primary users can share groups; secondary users can view '
+                    'their sharing or leave groups they have access to.')
+    group_sharing_parser.set_defaults(
+        func=lambda vars=None: group_sharing_parser.print_help())
+    group_sharing_subparsers = group_sharing_parser.add_subparsers(
+        dest='sharing_command', help='Group sharing operations')
+
+    # group sharing add
+    gs_add_parser = group_sharing_subparsers.add_parser(
+        'add', help='Share group(s) with a user (or add self-sharing without --user)',
+        formatter_class=argparse.RawTextHelpFormatter)
+    gs_add_parser.add_argument('--groups', type=str, required=True,
+                               metavar='<group_ids>',
+                               help='Comma separated group ids (max 10)')
+    gs_add_parser.add_argument('--user', type=str, metavar='<user_name>',
+                               help='User name (email) to share with. Optional.')
+    gs_add_parser.add_argument('--primary', action='store_true',
+                               help='Share with primary access (default: secondary)')
+    gs_add_parser.add_argument('--sub-role', type=int, choices=range(1, 5),
+                               metavar='<1-4>',
+                               help='Custom sub role (1-4)')
+    gs_add_parser.add_argument('--metadata', type=str, metavar='<json>',
+                               help='Custom metadata as a JSON string')
+    gs_add_parser.add_argument('--transfer', action='store_true',
+                               help='Transfer ownership of the group(s) to the user')
+    gs_add_parser.add_argument('--new-role', type=str, choices=['secondary'],
+                               help='Role to assign to self after transfer '
+                                    '(only valid with --transfer)')
+    gs_add_parser.add_argument('--raw', action='store_true',
+                               help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_add_parser)
+    gs_add_parser.set_defaults(func=group_sharing_add)
+
+    # group sharing remove
+    gs_remove_parser = group_sharing_subparsers.add_parser(
+        'remove', help='Remove group sharing with a user',
+        formatter_class=argparse.RawTextHelpFormatter)
+    gs_remove_parser.add_argument('--groups', type=str, required=True,
+                                  metavar='<group_ids>',
+                                  help='Comma separated group ids')
+    gs_remove_parser.add_argument('--user', type=str, required=True,
+                                  metavar='<user_name>',
+                                  help='User name (email) to unshare with')
+    gs_remove_parser.add_argument('--raw', action='store_true',
+                                  help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_remove_parser)
+    gs_remove_parser.set_defaults(func=group_sharing_remove)
+
+    # group sharing list
+    gs_list_parser = group_sharing_subparsers.add_parser(
+        'list', help='Show sharing details for groups / matter fabrics',
+        formatter_class=argparse.RawTextHelpFormatter)
+    gs_list_parser.add_argument('--group-id', type=str, metavar='<group_id>',
+                                help='Fetch sharing details for a single group')
+    gs_list_parser.add_argument('--sub-groups', action='store_true',
+                                help='Include sharing details of sub-groups')
+    gs_list_parser.add_argument('--parent-groups', action='store_true',
+                                help='Include sharing details of parent groups')
+    gs_list_parser.add_argument('--metadata', action='store_true',
+                                help='Include metadata set during sharing')
+    gs_list_parser.add_argument('--raw', action='store_true',
+                                help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_list_parser)
+    gs_list_parser.set_defaults(func=group_sharing_list)
+
+    # group sharing list-requests
+    gs_list_req_parser = group_sharing_subparsers.add_parser(
+        'list-requests', help='List pending group sharing requests',
+        formatter_class=argparse.RawTextHelpFormatter,
+        description='List pending group sharing requests.\n'
+                    'Use --primary-user to list requests raised by you.\n'
+                    'Without the flag, lists requests you have received.')
+    gs_list_req_parser.add_argument('--id', type=str, metavar='<request_id>',
+                                    help='Fetch a specific request by id')
+    gs_list_req_parser.add_argument('--primary-user', action='store_true',
+                                    help='List requests raised by current user '
+                                         '(default: requests received)')
+    gs_list_req_parser.add_argument('--raw', action='store_true',
+                                    help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_list_req_parser)
+    gs_list_req_parser.set_defaults(func=group_sharing_list_requests)
+
+    # group sharing accept
+    gs_accept_parser = group_sharing_subparsers.add_parser(
+        'accept', help='Accept a pending group sharing request')
+    gs_accept_parser.add_argument('--id', type=str, required=True,
+                                  metavar='<request_id>',
+                                  help='Id of the sharing request')
+    gs_accept_parser.add_argument('--raw', action='store_true',
+                                  help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_accept_parser)
+    gs_accept_parser.set_defaults(func=group_sharing_accept)
+
+    # group sharing decline
+    gs_decline_parser = group_sharing_subparsers.add_parser(
+        'decline', help='Decline a pending group sharing request')
+    gs_decline_parser.add_argument('--id', type=str, required=True,
+                                   metavar='<request_id>',
+                                   help='Id of the sharing request')
+    gs_decline_parser.add_argument('--raw', action='store_true',
+                                   help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_decline_parser)
+    gs_decline_parser.set_defaults(func=group_sharing_decline)
+
+    # group sharing cancel
+    gs_cancel_parser = group_sharing_subparsers.add_parser(
+        'cancel', help='Cancel a pending group sharing request (primary side)')
+    gs_cancel_parser.add_argument('--id', type=str, required=True,
+                                  metavar='<request_id>',
+                                  help='Id of the sharing request')
+    gs_cancel_parser.add_argument('--raw', action='store_true',
+                                  help='Print the raw JSON response instead of parsed output')
+    add_profile_argument(gs_cancel_parser)
+    gs_cancel_parser.set_defaults(func=group_sharing_cancel)
 
     # Automation Management
     automation_parser = subparsers.add_parser('automations',
