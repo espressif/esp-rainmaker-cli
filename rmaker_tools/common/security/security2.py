@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # APIs for interpreting and creating protobuf packets for
 # protocomm endpoint with security type protocomm_security2
+import base64
+import hashlib
 import struct
 import sys
 import os
@@ -75,6 +77,7 @@ class Security2(Security):
 
         self.client_pop_key = None
         self.nonce = bytearray()
+        self.session_key = None
 
         Security.__init__(self, self.security2_session)
 
@@ -170,6 +173,7 @@ class Security2(Security):
 
         # Using the first 256 bits of a 512 bit key
         session_key = shared_secret[:AES_KEY_LEN]
+        self.session_key = session_key
         self._print_verbose(f'Session Key:\t0x{session_key.hex()}')
 
         # 96-bit nonce
@@ -203,3 +207,65 @@ class Security2(Security):
         plaintext = self.cipher.decrypt(self.nonce, data, None)
         self._increment_nonce()
         return plaintext
+
+    @staticmethod
+    def _creds_hash(username: str, password: str) -> str:
+        h = hashlib.sha256()
+        h.update(str_to_bytes(username or ''))
+        h.update(b'\x00')
+        h.update(str_to_bytes(password or ''))
+        return h.hexdigest()
+
+    def serialize(self) -> Any:
+        """
+        Serialize session crypto state for disk persistence.
+        Returns a dict suitable for JSON serialization.
+        """
+        if self.session_key is None or not self.nonce:
+            return None
+        return {
+            'sec_ver': 2,
+            'sec_patch_ver': self.sec_patch_ver,
+            'session_key': base64.b64encode(self.session_key).decode('ascii'),
+            'nonce': base64.b64encode(bytes(self.nonce)).decode('ascii'),
+            'creds_hash': Security2._creds_hash(self.username, self.password),
+        }
+
+    @classmethod
+    def deserialize(cls, data: dict, username: str = '', password: str = '',
+                    verbose: bool = False) -> Any:
+        """
+        Restore a Security2 object from serialized session data.
+        Recreates the AES-GCM cipher and restores the nonce counter.
+
+        :param data: dict from serialize() / session.json
+        :param username: SRP6a username (used for creds_hash validation)
+        :param password: SRP6a password (used for creds_hash validation)
+        :param verbose: verbose flag
+        :return: Security2 instance, or None on hash mismatch / malformed data
+        """
+        try:
+            session_key = base64.b64decode(data['session_key'])
+            nonce = bytearray(base64.b64decode(data['nonce']))
+            sec_patch_ver = int(data.get('sec_patch_ver', 0))
+        except (KeyError, ValueError, Exception):
+            return None
+
+        saved_hash = data.get('creds_hash', '')
+        if saved_hash:
+            if cls._creds_hash(username, password) != saved_hash:
+                return None
+
+        obj = cls.__new__(cls)
+        obj.session_state = security_state.FINISHED
+        obj.sec_patch_ver = sec_patch_ver
+        obj.username = username
+        obj.password = password
+        obj.verbose = verbose
+        obj.client_pop_key = None
+        obj.nonce = nonce
+        obj.session_key = session_key
+        obj.cipher = AESGCM(session_key)
+
+        Security.__init__(obj, obj.security2_session)
+        return obj

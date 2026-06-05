@@ -240,31 +240,39 @@ def provision_device(transport_mode, pop, userid, secretkey,
         print("Establishing connection to node - Failed")
         return None
 
-    # Auto-detect security version if not specified
-    if security_version is None:
-        # First check if capabilities are supported or not
-        if not esp_prov.has_capability(obj_transport):
-            print('Security capabilities could not be determined, defaulting to Security 1')
-            security_version = 1
-        else:
-            # When no_sec is present, use security 0, else security 1
-            security_version = int(not esp_prov.has_capability(obj_transport, 'no_sec'))
-        print(f'==== Auto-detected Security Scheme: {security_version} ====')
-
-    # Fetch and print device capabilities before checking pop requirements
-    # This helps users understand why pop might be required
-    # Store the response to reuse later for challenge-response check
+    # Fetch device capabilities up-front so auto-detect can read prov.sec_ver
+    # directly (no_sec / no_pop caps alone don't distinguish sec1 from sec2).
+    # The response is reused later for challenge-response checks.
     version_response = None
+    prov_info = {}
     try:
         print("Checking device capabilities...")
         version_response = esp_prov.get_version(obj_transport)
         if version_response:
             print(f"Device capabilities response: {version_response}")
+            try:
+                prov_info = json.loads(version_response).get('prov', {}) or {}
+            except (ValueError, AttributeError):
+                prov_info = {}
         else:
             print("Device capabilities response: (empty or not available)")
     except Exception as e:
         # If we can't get capabilities, continue anyway
         print(f"Could not retrieve device capabilities: {e}")
+
+    # Auto-detect security version if not specified
+    if security_version is None:
+        advertised = prov_info.get('sec_ver')
+        if isinstance(advertised, int):
+            security_version = advertised
+        elif 'no_sec' in prov_info.get('cap', []):
+            security_version = 0
+        elif prov_info:
+            security_version = 1
+        else:
+            print('Security capabilities could not be determined, defaulting to Security 1')
+            security_version = 1
+        print(f'==== Auto-detected Security Scheme: {security_version} ====')
 
     # Handle Security 1 PoP requirements
     if security_version == 1:
@@ -280,9 +288,20 @@ def provision_device(transport_mode, pop, userid, secretkey,
     # Handle Security 2 credentials
     sec_patch_ver = 0
     if security_version == 2:
-        sec_patch_ver = esp_prov.get_sec_patch_ver(obj_transport)
+        # Prefer the sec_patch_ver already present in the cached prov_info, else probe.
+        advertised_patch = prov_info.get('sec_patch_ver') if prov_info else None
+        sec_patch_ver = int(advertised_patch) if isinstance(advertised_patch, int) \
+            else esp_prov.get_sec_patch_ver(obj_transport)
+
+        # Default username to 'wifiprov' (firmware default for the RainMaker
+        # provisioning endpoint) and treat --pop / QR pop as the SRP6a password
+        # when no explicit --sec2_password is given. Only prompt when neither
+        # pop nor sec2_password is available.
         if len(sec2_username) == 0:
-            sec2_username = input('Security Scheme 2 - SRP6a Username required: ')
+            sec2_username = 'wifiprov'
+            print(f"Using default Security 2 username '{sec2_username}'")
+        if len(sec2_password) == 0 and len(pop) > 0:
+            sec2_password = pop
         if len(sec2_password) == 0:
             sec2_password = getpass('Security Scheme 2 - SRP6a Password required: ')
 

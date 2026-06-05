@@ -524,6 +524,7 @@ async def run_raw_data_operation(nodeid, data_type, **kwargs):
     port = kwargs.get('port', None)
     device_name = kwargs.get('device_name', None)
     timestamp = kwargs.get('timestamp', None)
+    sec2_username = kwargs.get('sec2_username', 'wifiprov') or 'wifiprov'
     endpoint_name = 'get_params' if data_type == 0 else 'get_config'
     data_name = 'params' if data_type == 0 else 'config'
 
@@ -575,8 +576,9 @@ async def run_raw_data_operation(nodeid, data_type, **kwargs):
             if actual_sec_ver is None:
                 actual_sec_ver = 1
 
-        # Setup security
-        security_obj = get_security(actual_sec_ver, sec_patch_ver, '', '', pop, False)
+        # Setup security. For sec_ver=2, pop is used as the SRP6a password.
+        security_obj = get_security(actual_sec_ver, sec_patch_ver,
+                                    sec2_username, pop, pop, False)
         if security_obj is None:
             print("Failed to setup security")
             return None

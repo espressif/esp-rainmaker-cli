@@ -117,8 +117,15 @@ def provision(vars=None):
             raise ValueError("Proof of possession (pop) may be required depending on security scheme. "
                            "Use --pop, provide via --qrcode, or specify --sec_ver to skip pop requirement "
                            "(Security 0 and 2 don't require pop).")
-        sec2_username = vars.get('sec2_username', '')
-        sec2_password = vars.get('sec2_password', '')
+
+        # sec2 credentials: explicit options override QR code values.
+        # QR code fields: 'username' and 'password' (sec2 SRP6a credentials).
+        sec2_username = (vars.get('sec2_username')
+                         or qrcode_data.get('username')
+                         or '')
+        sec2_password = (vars.get('sec2_password')
+                         or qrcode_data.get('password')
+                         or '')
         ssid = vars.get('ssid')
         passphrase = vars.get('passphrase')
         no_wifi = vars.get('no_wifi', False)

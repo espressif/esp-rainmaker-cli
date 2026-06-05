@@ -356,6 +356,7 @@ async def run_raw_params_operation(nodeid, operation, data=None, **kwargs):
     sec_ver = kwargs.get('sec_ver', 0)  # Default to 0 for raw endpoints
     port = kwargs.get('port', None)
     device_name = kwargs.get('device_name', None)
+    sec2_username = kwargs.get('sec2_username', 'wifiprov') or 'wifiprov'
 
     # Build service name
     # For BLE transport, prefer device_name if provided, otherwise fallback to nodeid
@@ -414,8 +415,10 @@ async def run_raw_params_operation(nodeid, operation, data=None, **kwargs):
             if actual_sec_ver is None:
                 actual_sec_ver = 1  # Default to Security 1
 
-        # Setup security using detected/configured version
-        security_obj = get_security(actual_sec_ver, sec_patch_ver, '', '', pop, False)
+        # Setup security using detected/configured version.
+        # For sec_ver=2, pop is used as the SRP6a password.
+        security_obj = get_security(actual_sec_ver, sec_patch_ver,
+                                    sec2_username, pop, pop, False)
         if security_obj is None:
             print("Failed to setup security")
             return None

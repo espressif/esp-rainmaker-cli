@@ -31,10 +31,14 @@ async def _probe_session(transport_obj, security_obj):
         return False
 
 
-async def _try_resume_session(nodeid, pop, transport_type, session_store):
+async def _try_resume_session(nodeid, pop, transport_type, session_store,
+                              sec2_username='wifiprov'):
     """
     Attempt to resume a saved session from disk.
     Returns (transport_obj, security_obj) on success, (None, None) on failure.
+
+    For sec_ver=2 sessions, sec2_username is used with pop (as the SRP6a password)
+    to validate the saved creds_hash.
     """
     if session_store is None:
         return None, None
@@ -102,12 +106,20 @@ async def _try_resume_session(nodeid, pop, transport_type, session_store):
             return None, None
 
     try:
-        from ..common.security.security1 import Security1
         from ..common.transport.transport_http import Transport_HTTP
 
-        security_obj = Security1.deserialize(session_data, pop=pop, verbose=False)
+        saved_sec_ver = session_data.get('sec_ver')
+        if saved_sec_ver == 2:
+            from ..common.security.security2 import Security2
+            security_obj = Security2.deserialize(
+                session_data, username=sec2_username, password=pop, verbose=False
+            )
+        else:
+            from ..common.security.security1 import Security1
+            security_obj = Security1.deserialize(session_data, pop=pop, verbose=False)
+
         if security_obj is None:
-            log.debug("Failed to deserialize security object (POP mismatch?)")
+            log.debug("Failed to deserialize security object (creds mismatch?)")
             session_store.invalidate_session(nodeid)
             return None, None
 
@@ -182,13 +194,54 @@ def _save_session_state(nodeid, transport_obj, security_obj, transport_type, sec
 
 
 def _update_session_offset(nodeid, security_obj, session_store):
-    """Update the CTR offset in the saved session after an operation."""
+    """
+    Update the crypto state (CTR offset for sec1, nonce for sec2) in the saved
+    session after an operation, so a future resume picks up where we left off.
+    """
     if session_store is None:
         return
     try:
-        session_store.update_session_offset(nodeid, security_obj.ctr_offset)
+        if hasattr(security_obj, 'ctr_offset') and not hasattr(security_obj, 'nonce'):
+            # Security1 fast-path — cheap partial update.
+            session_store.update_session_offset(nodeid, security_obj.ctr_offset)
+            return
+
+        # Security2 (or any future scheme): rewrite the serialized blob so the
+        # current nonce/counter is persisted.
+        if not hasattr(security_obj, 'serialize'):
+            return
+        data = session_store.load_session(nodeid)
+        if data is None:
+            return
+        sec_data = security_obj.serialize()
+        if sec_data is None:
+            return
+        data.update(sec_data)
+        session_store.save_session(nodeid, data)
     except Exception as e:
-        log.debug(f"Failed to update session offset: {e}")
+        log.debug(f"Failed to update session state: {e}")
+
+
+def _probe_sec_patch_ver(transport_obj):
+    """
+    Query esp_local_ctrl/version to discover the device's sec_patch_ver.
+    Returns the advertised integer, or 0 if the endpoint is missing/parse fails
+    (legacy firmware).
+
+    protocomm_httpd rejects POSTs with content_len <= 0, so we send "---"
+    as a dummy body — the version handler ignores it.
+    """
+    try:
+        response = transport_obj.send_data('esp_local_ctrl/version', '---')
+        if isinstance(response, bytes):
+            response = response.decode('utf-8', errors='replace')
+        info = json.loads(response)
+        local_ctrl = info.get('local_ctrl') if isinstance(info, dict) else None
+        if isinstance(local_ctrl, dict) and 'sec_patch_ver' in local_ctrl:
+            return int(local_ctrl['sec_patch_ver'])
+    except Exception as e:
+        log.debug(f"sec_patch_ver probe failed, defaulting to 0: {e}")
+    return 0
 
 
 async def _execute_operation(transport_obj, security_obj, operation, data):
@@ -204,11 +257,17 @@ async def _execute_operation(transport_obj, security_obj, operation, data):
         return None
 
 
-async def _fresh_establish(nodeid, pop, transport_type, sec_ver, port):
+async def _fresh_establish(nodeid, pop, transport_type, sec_ver, port,
+                           sec2_username='wifiprov', sec_patch_ver=None):
     """
     Establish a fresh transport + security session.
     Returns (transport_obj, security_obj, error_reason).
     error_reason is None on success, ERR_TRANSPORT or ERR_SECURITY on failure.
+
+    For sec_ver=2, `pop` is used as the SRP6a password. If sec_patch_ver is
+    None, the firmware is probed via esp_local_ctrl/version — newer firmware
+    advertises sec_patch_ver=1 (counter-in-IV), older firmware returns 0
+    (legacy static IV).
     """
     if ':' not in nodeid:
         if nodeid.endswith('.local'):
@@ -225,7 +284,14 @@ async def _fresh_establish(nodeid, pop, transport_type, sec_ver, port):
         log.error("Failed to establish transport")
         return None, None, ERR_TRANSPORT
 
-    security_obj = get_security(sec_ver, 0, '', '', pop, False)
+    if sec_ver == 2 and sec_patch_ver is None:
+        sec_patch_ver = _probe_sec_patch_ver(transport_obj)
+        log.debug(f"Using sec_patch_ver={sec_patch_ver} for node {nodeid}")
+    if sec_patch_ver is None:
+        sec_patch_ver = 0
+
+    security_obj = get_security(sec_ver, sec_patch_ver,
+                                sec2_username, pop, pop, False)
     if security_obj is None:
         log.error("Failed to setup security")
         return None, None, ERR_SECURITY
@@ -327,6 +393,8 @@ async def run_local_control_operation(nodeid, operation, data=None, **kwargs):
     node_cache = kwargs.get('node_cache', None)
     session_store = kwargs.get('session_store', None)
     explicit_sec_ver = kwargs.get('explicit_sec_ver', False)
+    sec2_username = kwargs.get('sec2_username', 'wifiprov') or 'wifiprov'
+    sec_patch_ver = None  # discovered lazily in _fresh_establish when needed
 
     if node_cache:
         capability = node_cache.get_local_control_capability(nodeid)
@@ -341,12 +409,14 @@ async def run_local_control_operation(nodeid, operation, data=None, **kwargs):
             transport_type = capability.get('transport', transport_type)
             if sec_ver == 0:
                 pop = ''
+        if capability and capability.get('sec_patch_ver') is not None:
+            sec_patch_ver = capability.get('sec_patch_ver')
 
     last_err = None
 
     try:
         transport_obj, security_obj = await _try_resume_session(
-            nodeid, pop, transport_type, session_store
+            nodeid, pop, transport_type, session_store, sec2_username
         )
 
         resumed = transport_obj is not None
@@ -363,11 +433,13 @@ async def run_local_control_operation(nodeid, operation, data=None, **kwargs):
                         return None
                 else:
                     transport_obj, security_obj, last_err = await _fresh_establish(
-                        nodeid, pop, transport_type, sec_ver, port
+                        nodeid, pop, transport_type, sec_ver, port,
+                        sec2_username, sec_patch_ver
                     )
             else:
                 transport_obj, security_obj, last_err = await _fresh_establish(
-                    nodeid, pop, transport_type, sec_ver, port
+                    nodeid, pop, transport_type, sec_ver, port,
+                    sec2_username, sec_patch_ver
                 )
 
             if transport_obj is None or security_obj is None:
@@ -381,14 +453,25 @@ async def run_local_control_operation(nodeid, operation, data=None, **kwargs):
 
         if result is not None:
             _update_session_offset(nodeid, security_obj, session_store)
-            if node_cache and not node_cache.get_local_control_capability(nodeid):
-                node_cache.set_local_control_capability(nodeid, {
-                    'supported': True,
-                    'sec_ver': sec_ver,
-                    'pop_required': bool(pop),
-                    'transport': transport_type,
-                    'port': port,
-                })
+            if node_cache:
+                existing = node_cache.get_local_control_capability(nodeid)
+                obj_patch_ver = getattr(security_obj, 'sec_patch_ver', None)
+                if not existing:
+                    cap = {
+                        'supported': True,
+                        'sec_ver': sec_ver,
+                        'pop_required': bool(pop),
+                        'transport': transport_type,
+                        'port': port,
+                    }
+                    if sec_ver == 2 and obj_patch_ver is not None:
+                        cap['sec_patch_ver'] = obj_patch_ver
+                    node_cache.set_local_control_capability(nodeid, cap)
+                elif (sec_ver == 2 and obj_patch_ver is not None
+                      and existing.get('sec_patch_ver') != obj_patch_ver):
+                    # Persist freshly-probed patch_ver so future connects skip the probe.
+                    existing['sec_patch_ver'] = obj_patch_ver
+                    node_cache.set_local_control_capability(nodeid, existing)
 
         if result is None and resumed:
             log.debug("Operation failed on resumed session, retrying with fresh session")
@@ -396,7 +479,8 @@ async def run_local_control_operation(nodeid, operation, data=None, **kwargs):
                 session_store.invalidate_session(nodeid)
 
             transport_obj, security_obj, last_err = await _fresh_establish(
-                nodeid, pop, transport_type, sec_ver, port
+                nodeid, pop, transport_type, sec_ver, port,
+                sec2_username, sec_patch_ver
             )
             if transport_obj is None or security_obj is None:
                 _set_error(last_err or ERR_SECURITY)
