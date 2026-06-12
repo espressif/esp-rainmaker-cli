@@ -78,6 +78,9 @@ def _build_local_options_with_cache(vars_dict, node_cache=None, session_store=No
     sec_ver = raw_sec_ver if raw_sec_ver is not None else 1
     nodeid = vars_dict.get('nodeid', '')
 
+    user_sec2_username = vars_dict.get('sec2_username')  # None => not supplied
+    sec2_username = user_sec2_username
+
     if node_cache and not pop:
         capability = node_cache.get_local_control_capability(nodeid)
         if capability:
@@ -99,6 +102,9 @@ def _build_local_options_with_cache(vars_dict, node_cache=None, session_store=No
                 log.debug(f"Using cached POP for node {nodeid}")
                 if lc_info.get('sec_ver') is not None and not explicit_sec_ver:
                     sec_ver = lc_info['sec_ver']
+                if sec2_username is None and lc_info.get('username'):
+                    sec2_username = lc_info['username']
+                    log.debug(f"Using cached sec2 username for node {nodeid}")
 
         if not pop and not explicit_sec_ver:
             try:
@@ -114,15 +120,23 @@ def _build_local_options_with_cache(vars_dict, node_cache=None, session_store=No
                         pop = lc_info.get('pop', '')
                         if lc_info.get('sec_ver') is not None:
                             sec_ver = lc_info['sec_ver']
+                        if sec2_username is None and lc_info.get('username'):
+                            sec2_username = lc_info['username']
                         log.debug(f"Resolved POP from cloud for node {nodeid}")
             except Exception as e:
                 log.debug(f"Failed to auto-resolve POP from cloud: {e}")
+
+    if not sec2_username:
+        sec2_username = 'wifiprov'
+        if sec_ver == 2:
+            print(f"Using default Security 2 username '{sec2_username}'")
 
     local_options = {
         'pop': pop,
         'transport': vars_dict.get('transport', 'http'),
         'port': vars_dict.get('port', 8080),
         'sec_ver': sec_ver,
+        'sec2_username': sec2_username,
         'local_raw': vars_dict.get('local_raw', False),
         'device_name': vars_dict.get('device_name', None),
         'node_cache': node_cache,
@@ -1259,6 +1273,7 @@ def get_node_config(vars=None):
                     'transport': vars.get('transport', 'ble'),
                     'port': vars.get('port', 8080),
                     'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1,
+                    'sec2_username': vars.get('sec2_username', 'wifiprov') or 'wifiprov',
                     'device_name': vars.get('device_name', None),
                     'timestamp': timestamp
                 }
@@ -1312,7 +1327,8 @@ def get_node_config(vars=None):
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1
+                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1,
+                        'sec2_username': vars.get('sec2_username', 'wifiprov') or 'wifiprov',
                     }
 
                     node_config = run_local_control_operation(
@@ -1326,7 +1342,8 @@ def get_node_config(vars=None):
                         'pop': vars.get('pop', ''),
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
-                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0
+                        'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0,
+                        'sec2_username': vars.get('sec2_username', 'wifiprov') or 'wifiprov',
                     }
 
                     log.info("Using simplified local control (security level 0)")
@@ -1567,6 +1584,7 @@ def set_params(vars=None):
                     'transport': vars.get('transport', 'http'),
                     'port': vars.get('port', 8080),
                     'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0,
+                    'sec2_username': vars.get('sec2_username', 'wifiprov') or 'wifiprov',
                     'local_raw': vars.get('local_raw', False),
                     'device_name': vars.get('device_name', None)
                 }
@@ -1753,6 +1771,7 @@ def get_params(vars=None):
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
                         'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 1,
+                        'sec2_username': vars.get('sec2_username', 'wifiprov') or 'wifiprov',
                         'local_raw': vars.get('local_raw', False),
                         'device_name': vars.get('device_name', None),
                         'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,
@@ -1779,6 +1798,7 @@ def get_params(vars=None):
                         'transport': vars.get('transport', 'http'),
                         'port': vars.get('port', 8080),
                         'sec_ver': vars.get('sec_ver') if vars.get('sec_ver') is not None else 0,
+                        'sec2_username': vars.get('sec2_username', 'wifiprov') or 'wifiprov',
                         'local_raw': vars.get('local_raw', False),
                         'device_name': vars.get('device_name', None),
                         'timestamp': timestamp if not (proxy_report and vars.get('local_raw', False) and not timestamp_explicitly_provided) else timestamp,

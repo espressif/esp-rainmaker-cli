@@ -2,6 +2,19 @@
 
 All major changes to ESP RainMaker CLI will be documented in this file.
 
+## [1.14.1] - 05-Jun-2026
+### Bugfixes
+- Security 2 fixes across provisioning and local control:
+  - Provisioning auto-detect now reads `prov.sec_ver` from device capabilities
+    (was forcing sec1 on sec2 devices, causing firmware "Security version mismatch")
+  - `sec_patch_ver` discovered from device capabilities / `esp_local_ctrl/version`,
+    enabling the counter-in-IV scheme on ESP-IDF v5.4+ firmware
+  - `--sec2_username` option added to `--local` commands (`getnodeconfig`,
+    `getparams`, `setparams`); defaults to `wifiprov`, picks up cached
+    `local_control_username` from cloud params; `--pop` used as the SRP6a password
+  - QR code `username` / `password` fields now honoured by `provision`
+  - `Security2.serialize`/`deserialize` for local-control session resume parity with Security 1
+
 ## [1.14.0] - 24-Apr-2026
 ### Added
 - New `group sharing` subcommand for sharing device groups / Matter fabrics between users:

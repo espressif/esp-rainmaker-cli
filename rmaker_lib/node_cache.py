@@ -56,7 +56,7 @@ def _get_cache_base_dir(profile_config=None):
 
 def extract_local_control_info(params_or_details):
     """
-    Extract local control info (POP, sec_ver, transport, port) from
+    Extract local control info (POP, sec_ver, username, transport, port) from
     node params or node details response data.
 
     Scans for a service/device named "Local Control" or similar that
@@ -74,6 +74,9 @@ def extract_local_control_info(params_or_details):
             lower_key = key.lower().replace(' ', '_').replace('-', '_')
             if lower_key in ('pop', 'proof_of_possession'):
                 info['pop'] = str(value)
+            elif lower_key in ('username', 'user_name', 'local_control_username'):
+                if value:
+                    info['username'] = str(value)
             elif lower_key == 'sec_ver':
                 try:
                     info['sec_ver'] = int(value)

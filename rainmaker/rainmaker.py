@@ -285,6 +285,10 @@ def main():
                                      choices=[0, 1, 2],
                                      default=None,
                                      help='Security version for local control (default: 1)')
+    getnodeconfig_parser.add_argument('--sec2_username',
+                                     type=str,
+                                     default=None,
+                                     help='SRP6a username for Security 2 local control. Defaults to the username cached from cloud params, else \'wifiprov\'. --pop is used as the password.')
     getnodeconfig_parser.add_argument('--local-raw',
                                      action='store_true',
                                      help='Use local control via raw endpoints (get_config with fragmentation) instead of esp_local_ctrl')
@@ -355,6 +359,10 @@ def main():
                                  choices=[0, 1, 2],
                                  default=None,
                                  help='Security version for local control (default: 1)')
+    setparams_parser.add_argument('--sec2_username',
+                                 type=str,
+                                 default=None,
+                                 help='SRP6a username for Security 2 local control. Defaults to the username cached from cloud params, else \'wifiprov\'. --pop is used as the password.')
     setparams_parser.add_argument('--local-raw',
                                  action='store_true',
                                  help='Use local control via raw endpoints (get_params/set_params) instead of esp_local_ctrl')
@@ -398,6 +406,10 @@ def main():
                                  choices=[0, 1, 2],
                                  default=None,
                                  help='Security version for local control (default: 1)')
+    getparams_parser.add_argument('--sec2_username',
+                                 type=str,
+                                 default=None,
+                                 help='SRP6a username for Security 2 local control. Defaults to the username cached from cloud params, else \'wifiprov\'. --pop is used as the password.')
     getparams_parser.add_argument('--local-raw',
                                  action='store_true',
                                  help='Use local control via raw endpoints (get_params/set_params) instead of esp_local_ctrl')
