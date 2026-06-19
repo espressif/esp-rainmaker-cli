@@ -88,11 +88,12 @@ def get_sec_patch_ver(tp, verbose=False):
     except Exception:
         return 0
 
-def get_transport(sel_transport, service_name):
+def get_transport(sel_transport, service_name, ble_adapter=transport.DEFAULT_BLE_ADAPTER):
     """
     Get object of class `Transport` based on input parameters
     `sel_transport` - Transport Mode (softap/ble)
     `service_name` - Service Name to connect to
+    `ble_adapter` - HCI adapter name for BLE transport
     """
     try:
         tp = None
@@ -115,9 +116,10 @@ def get_transport(sel_transport, service_name):
             import inspect
             import asyncio
             sig = inspect.signature(transport.Transport_BLE.__init__)
-            if len(sig.parameters) == 3:  # self, service_uuid, nu_lookup
+            if len(sig.parameters) == 4:  # self, service_uuid, nu_lookup, ble_adapter
                 ble_transport = transport.Transport_BLE(service_uuid='0000ffff-0000-1000-8000-00805f9b34fb',
-                                                        nu_lookup=nu_lookup)
+                                                        nu_lookup=nu_lookup,
+                                                        ble_adapter=ble_adapter)
                 
                 # Create sync wrapper for async transport
                 class SyncBLETransport:

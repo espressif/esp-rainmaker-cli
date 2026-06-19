@@ -5,9 +5,11 @@
 from . import ble_cli
 from .transport import Transport
 
+DEFAULT_BLE_ADAPTER = 'hci0'
+
 
 class Transport_BLE(Transport):
-    def __init__(self, service_uuid, nu_lookup):
+    def __init__(self, service_uuid, nu_lookup, ble_adapter=DEFAULT_BLE_ADAPTER):
         # Store original endpoint IDs (e.g., 'ff54', 'ff55') for fallback calculation
         self.endpoint_ids = nu_lookup.copy()
         self.service_uuid = service_uuid
@@ -23,13 +25,15 @@ class Transport_BLE(Transport):
             # Result: '0000ff54-0000-1000-8000-00805f9b34fb'
             self.fallback_lookup[name] = service_uuid[:4] + endpoint_id + service_uuid[8:]
 
+        self.ble_adapter = ble_adapter
+
         # Get BLE client module
         self.cli = ble_cli.get_client()
 
     async def connect(self, devname):
         # Use client to connect to BLE device and bind to service
         # Pass endpoint names (not UUIDs) for auto-discovery via user descriptors
-        if not await self.cli.connect(devname=devname, iface='hci0',
+        if not await self.cli.connect(devname=devname, iface=self.ble_adapter,
                                       chrc_names=self.endpoint_ids.keys(),
                                       fallback_srv_uuid=self.service_uuid):
             raise RuntimeError('Failed to initialize transport')

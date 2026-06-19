@@ -48,7 +48,7 @@ def get_security(secver, sec_patch_ver, username, password, pop='', verbose=Fals
     return None
 
 
-async def get_transport(sel_transport, service_name):
+async def get_transport(sel_transport, service_name, ble_adapter=transport.DEFAULT_BLE_ADAPTER):
     try:
         tp = None
         if (sel_transport in ['softap', 'httpd']):
@@ -65,7 +65,7 @@ async def get_transport(sel_transport, service_name):
             # will fallback to using the provided UUIDs instead
             nu_lookup = {'prov-session': 'ff51', 'prov-config': 'ff52', 'proto-ver': 'ff53'}
             tp = transport.Transport_BLE(service_uuid='021a9004-0382-4aea-bff4-6b3f1c5adfb4',
-                                         nu_lookup=nu_lookup)
+                                         nu_lookup=nu_lookup, ble_adapter=ble_adapter)
             await tp.connect(devname=service_name)
         elif (sel_transport == 'console'):
             tp = transport.Transport_Console()

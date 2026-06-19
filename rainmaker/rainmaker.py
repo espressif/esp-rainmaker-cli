@@ -564,6 +564,12 @@ def main():
                                   help='Metadata as JSON string to attach during node mapping\n'
                                        '(e.g., \'{"serial_no": "abc123", "region": "us"}\')')
 
+    provision_parser.add_argument('--ble_adapter',
+                                  type=str,
+                                  default='hci0',
+                                  help='HCI adapter to use for BLE transport (default: hci0).\n'
+                                       'Useful with vhci_bridge for emulated devices, e.g. --ble_adapter hci1')
+
     add_profile_argument(provision_parser)
     provision_parser.set_defaults(func=provision)
 

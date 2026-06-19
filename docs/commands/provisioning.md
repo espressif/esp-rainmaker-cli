@@ -28,6 +28,7 @@ esp-rainmaker-cli provision [--pop <pop>] [options]
 - `--transport <mode>`: Communication method (softap, ble, console, on-network)
 - `--sec_ver <version>`: Security scheme (0, 1, or 2)
 - `--qrcode <json>`: QR code payload as JSON string (extracts transport, device_name, and pop)
+- `--ble_adapter <name>`: HCI adapter to use for BLE transport (default: `hci0`). Useful with `vhci_bridge` for emulated devices, e.g. `--ble_adapter hci1`. Linux/BlueZ only; ignored on macOS/Windows.
 
 ### Transport Modes
 
@@ -191,6 +192,15 @@ esp-rainmaker-cli provision --pop abcd1234 \
   --device_name PROV_d76c30 \
   --ssid "MyWiFiNetwork" \
   --passphrase "MyWiFiPassword"
+```
+
+### BLE Provisioning with a Specific HCI Adapter
+```bash
+# Target a non-default adapter (e.g. hci1 from vhci_bridge for emulated devices)
+esp-rainmaker-cli provision --pop abcd1234 \
+  --transport ble \
+  --device_name PROV_d76c30 \
+  --ble_adapter hci1
 ```
 
 ### SoftAP Provisioning with Security 2
